@@ -1,0 +1,64 @@
+# ---------------------------------------------------------------
+#  Asset folders: everything is ignored EXCEPT the example files
+#  shipped with the repository. Your own signatures, frames and
+#  badges will never be published by accident.
+#
+#  Note the pattern: "Folder/*" ignores the contents, "!Folder/file"
+#  brings a single file back in. Using "Folder/" instead would make
+#  the exception impossible.
+# ---------------------------------------------------------------
+Firme/*
+!Firme/example_name.png
+
+Cornici/*
+!Cornici/Example-frame.png
+
+Cornici_Mask/*
+!Cornici_Mask/cerchio.png
+!Cornici_Mask/cerchio_Adult-F.png
+
+Maschere/*
+!Maschere/cerchio.png
+
+Extra/*
+!Extra/realistic.png
+
+Rating/*
+!Rating/SFW.png
+!Rating/NSFW_1.png
+!Rating/NSFW_2.png
+!Rating/NSFW_3.png
+!Rating/NSFW_4.png
+!Rating/NSFW_5.png
+!Rating/New_SFW.png
+!Rating/New_Nude.png
+!Rating/New_Sex.png
+!Rating/New_Hard.png
+
+# ---------------------------------------------------------------
+#  Personal configuration — the program recreates these on first
+#  run, and they hold your own text, links and preferences.
+# ---------------------------------------------------------------
+copyright.txt
+footer_note.txt
+ignore_loras.txt
+ignore_tags.txt
+model_links.json
+settings.json
+text_presets.json
+Layouts/
+Lang/config.txt
+
+# ---------------------------------------------------------------
+#  Output and local artefacts
+# ---------------------------------------------------------------
+Output_Pubblicazione/
+Output_AI/
+output/
+.venv/
+__pycache__/
+*.pyc
+*.exe
+*.ico
+*.rar
+*.zip
