@@ -362,3 +362,13 @@ Zoom only affects the working view — the exported file is always full resoluti
 - The tool never writes to your source image. Every export is a new file in `Output_Pubblicazione/`.
 - The main exported PNG has its metadata **stripped** by default, so your prompt is not embedded in the file you upload. Turn on **Metadata** in Settings if you would rather keep it.
 - Screenshots in this README were taken with the interface set to English.
+
+---
+
+## License
+
+Released under the **MIT License** — see [LICENSE](LICENSE).
+You are free to use, modify and redistribute it, including commercially; just keep the copyright notice.
+
+The example assets shipped in `Firme/`, `Cornici/`, `Cornici_Mask/`, `Maschere/`, `Extra/` and `Rating/`
+are provided only so the interface is not empty on first launch.
