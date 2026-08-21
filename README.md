@@ -114,10 +114,19 @@ The exported frame file is named `original_name + frame_name`, so you can export
 
 The frame system is built around squares and rectangles. If you want a circle, a hexagon or any other shape, enable **Circle Texture Mode**, which then reads from `Cornici_Mask/` and `Maschere/`:
 
-- In **`Cornici_Mask/`** put the *cutout* — a PNG containing only the border of the shape, e.g. `circle.png` — plus the textures/overlays that share its prefix, e.g. `circle_Adult-F.png`. The dropdown filters overlays by prefix automatically.
-- In **`Maschere/`** put the black-and-white mask with the same prefix, e.g. `circle.png`. **Black is where your image shows through; white is left out.**
+- In **`Cornici_Mask/`** put the *cutout* — a PNG containing only the border of the shape, e.g. `cerchio.png` — plus the textures/overlays that share its prefix, e.g. `cerchio_Adult-F.png`. The dropdown filters overlays by prefix automatically.
+- In **`Maschere/`** put the black-and-white mask with the same prefix, e.g. `cerchio.png`. **Black is where your image shows through; white is left out.**
 
 The exported frame is a PNG with transparency instead of a JPG.
+
+> **The circular mask shipped with this repository is reusable.** The program takes the frame's
+> name, cuts it at the first `_` and looks for a mask with that prefix. So every overlay you name
+> `cerchio_something.png` automatically reuses `Maschere/cerchio.png` — you can design as many
+> circular frames as you like without ever creating a mask.
+>
+> If a mask is missing, the tool falls back to an ellipse that fills the frame, so round shapes
+> keep working anyway. The mask is what makes **non-elliptical** shapes possible — hexagons,
+> hearts, stars — so keep it around, or add your own with a new prefix.
 
 ### Rating
 
