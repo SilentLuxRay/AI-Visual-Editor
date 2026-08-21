@@ -4,7 +4,18 @@ import re
 import json
 import math
 import fnmatch
+import threading
+import urllib.request
+import urllib.error
 from datetime import datetime
+
+# --- identità della versione: unico punto in cui il numero è scritto ---
+APP_VERSION = "2.26"
+APP_CODENAME = "Auto Update"
+GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
+GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
+MAIN_SCRIPT_NAME = "processore_immagini.py"
 from PIL import Image, ImageTk, PngImagePlugin, ImageFilter, ImageOps, ImageChops, ImageDraw, ImageFont, ImageColor
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, colorchooser, simpledialog
@@ -18,7 +29,7 @@ except ImportError:
 class ImageProcessor:
     def __init__(self, root):
         self.root = root
-        self.root.title("AI Visual Editor — Studio Pro v2.25 (Readability)")
+        self.root.title(f"AI Visual Editor — Studio Pro v{APP_VERSION} ({APP_CODENAME})")
         self.root.geometry("1600x1080")
         self.root.minsize(1280, 800)
 
@@ -109,6 +120,9 @@ class ImageProcessor:
             self.civitai_links = tk.BooleanVar(value=True)  # link di ricerca Civitai per i modelli NON in tabella
             self.custom_links = tk.BooleanVar(value=True)   # link personalizzati per i modelli presenti in tabella
             self.show_rng = tk.BooleanVar(value=False)      # tiene "RNG:" nei parametri del TXT (utile per riprodurre)
+            self.update_check = tk.BooleanVar(value=True)   # controllo aggiornamenti all'avvio
+            self._update_info = None                         # dati dell'ultima release trovata
+            self._update_banner = None
             self.model_links = []                            # [{"name":..., "url":...}] da model_links.json
             self._links_index = {}                           # nome normalizzato -> url
             self._load_model_links()
@@ -117,6 +131,7 @@ class ImageProcessor:
                 "sdnext_mode": self.sdnext_mode, "keep_metadata": self.keep_metadata,
                 "optimize_png": self.optimize_png, "civitai_links": self.civitai_links,
                 "custom_links": self.custom_links, "show_rng": self.show_rng,
+                "update_check": self.update_check,
             }
             self._load_settings()
             # i trace vanno registrati DOPO il caricamento, altrimenti si riscrive il file all'avvio
@@ -223,6 +238,20 @@ class ImageProcessor:
                 "s_tab": "  ⚙  Impostazioni  ", "s_title": "⚙  IMPOSTAZIONI",
                 "s_language": "🌐  LINGUA",
                 "s_output": "💾  OPZIONI DI SALVATAGGIO",
+                # --- aggiornamenti ---
+                "u_section": "⬆️  AGGIORNAMENTI", "u_check_startup": "Controlla all'avvio",
+                "u_check_now": "Controlla ora", "u_open_page": "Apri la pagina",
+                "u_hint": "Il controllo contatta GitHub solo per leggere il numero\ndell'ultima versione. Non viene inviato nulla di tuo.",
+                "u_available": "⬆  Disponibile la versione {v} — clicca per aggiornare",
+                "u_up_to_date": "Stai già usando l'ultima versione (v{v}).",
+                "u_check_failed": "Impossibile controllare gli aggiornamenti.\nControlla la connessione e riprova.",
+                "u_confirm": "Scaricare e installare la versione {v}?\n\nLa versione attuale verrà salvata come copia di sicurezza.\nSe hai modificato il file, le tue modifiche verranno sostituite.",
+                "u_download_failed": "Scaricamento non riuscito.",
+                "u_invalid": "Il file scaricato non è valido: aggiornamento annullato.\nNiente è stato modificato.",
+                "u_write_failed": "Impossibile scrivere il file: aggiornamento annullato.",
+                "u_done": "Aggiornato alla versione {v}.\n\nCopia di sicurezza: {b}\n\nChiudi e riapri il programma per usare la nuova versione.",
+                "u_frozen": "Stai usando la versione compilata (.exe): scarica il nuovo pacchetto dalla pagina delle release.",
+                "u_not_found": "File {f} non trovato accanto al programma: aggiornamento annullato.",
                 "show_rng": "Includi RNG nei parametri",
                 "s_rng_hint": "RNG dice se il rumore è stato generato su CPU o GPU:\nserve a chi vuole riprodurre la tua generazione.",
                 "s_metadata_hint": "Queste opzioni vengono ricordate al prossimo avvio.\n⚠ Con \"Metadata\" attivo i dati vengono scritti dentro il\nPNG e il file .txt del prompt NON viene creato.",
@@ -278,6 +307,9 @@ class ImageProcessor:
             if DND_AVAILABLE:
                 self.canvas.drop_target_register(DND_FILES)
                 self.canvas.dnd_bind("<<Drop>>", self.on_drop)
+            # controllo aggiornamenti: parte dopo che la finestra è pronta, in background
+            if self.update_check.get():
+                self.root.after(1200, lambda: self.check_updates_async(manual=False))
 
         except Exception as e:
             messagebox.showerror("Error", f"Startup failed: {e}")
@@ -314,6 +346,20 @@ class ImageProcessor:
             "s_tab": "  ⚙  Settings  ", "s_title": "⚙  SETTINGS",
             "s_language": "🌐  LANGUAGE",
             "s_output": "💾  SAVING OPTIONS",
+            # --- updates ---
+            "u_section": "⬆️  UPDATES", "u_check_startup": "Check on startup",
+            "u_check_now": "Check now", "u_open_page": "Open the page",
+            "u_hint": "The check contacts GitHub only to read the latest version\nnumber. Nothing of yours is ever sent.",
+            "u_available": "⬆  Version {v} is available — click to update",
+            "u_up_to_date": "You are already on the latest version (v{v}).",
+            "u_check_failed": "Could not check for updates.\nCheck your connection and try again.",
+            "u_confirm": "Download and install version {v}?\n\nYour current version will be kept as a backup.\nIf you edited the file, your changes will be replaced.",
+            "u_download_failed": "Download failed.",
+            "u_invalid": "The downloaded file is not valid: update cancelled.\nNothing has been changed.",
+            "u_write_failed": "Could not write the file: update cancelled.",
+            "u_done": "Updated to version {v}.\n\nBackup: {b}\n\nClose and reopen the program to use the new version.",
+            "u_frozen": "You are running the packaged version (.exe): download the new package from the releases page.",
+            "u_not_found": "File {f} not found next to the program: update cancelled.",
             "show_rng": "Include RNG in parameters",
             "s_rng_hint": "RNG tells whether noise was generated on CPU or GPU:\nit helps anyone trying to reproduce your generation.",
             "s_metadata_hint": "These options are remembered on next launch.\n⚠ With \"Metadata\" on, data is written inside the PNG\nand the prompt .txt file is NOT created.",
@@ -650,6 +696,116 @@ class ImageProcessor:
         for e in self.MODEL_EXTS:
             if n.endswith(e): n = n[:-len(e)]; break
         return n.strip()
+
+    # =========================================================
+    # AGGIORNAMENTI — controllo su GitHub Releases
+    # =========================================================
+    @staticmethod
+    def _version_tuple(v):
+        """'v2.26.1' -> (2, 26, 1). Serve a confrontare le versioni come numeri,
+        altrimenti '2.9' risulterebbe maggiore di '2.10'."""
+        nums = re.findall(r"\d+", str(v or ""))
+        return tuple(int(n) for n in nums) if nums else (0,)
+
+    def check_updates_async(self, manual=False):
+        """Interroga GitHub in un thread separato: l'avvio non deve mai restare
+        appeso per colpa della rete. Il thread NON tocca widget — il risultato
+        torna al thread principale con root.after()."""
+        def worker():
+            info, err = None, None
+            try:
+                req = urllib.request.Request(GITHUB_RELEASES_API,
+                    headers={"User-Agent": f"AI-Visual-Editor/{APP_VERSION}", "Accept": "application/vnd.github+json"})
+                with urllib.request.urlopen(req, timeout=8) as r:
+                    data = json.loads(r.read().decode("utf-8"))
+                info = {"tag": str(data.get("tag_name") or "").strip(),
+                        "name": str(data.get("name") or "").strip(),
+                        "notes": str(data.get("body") or "").strip(),
+                        "url": str(data.get("html_url") or GITHUB_RELEASES_PAGE)}
+            except Exception as ex:
+                err = str(ex)
+            try: self.root.after(0, lambda: self._on_update_checked(info, err, manual))
+            except Exception: pass
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_update_checked(self, info, err, manual):
+        """Gira nel thread della UI: qui si può toccare l'interfaccia."""
+        if err or not info or not info.get("tag"):
+            if manual: messagebox.showinfo(self.tr("u_section"), self.tr("u_check_failed"))
+            return
+        newer = self._version_tuple(info["tag"]) > self._version_tuple(APP_VERSION)
+        self._update_info = info if newer else None
+        if newer:
+            self._show_update_banner(info)
+        elif manual:
+            messagebox.showinfo(self.tr("u_section"), self.tr("u_up_to_date").format(v=APP_VERSION))
+
+    def _show_update_banner(self, info):
+        """Striscia cliccabile in cima alla sidebar dell'Editor."""
+        if getattr(self, "_update_banner", None) is not None: return
+        C = self.C
+        b = tk.Frame(self.editor_top_holder, bg=C["amber"])
+        b.pack(fill=tk.X, before=None)
+        lbl = tk.Label(b, text=self.tr("u_available").format(v=info["tag"]), bg=C["amber"], fg="#2a1f05",
+                       font=(self.FONT, 9, "bold"), cursor="hand2", pady=6)
+        lbl.pack(side=tk.LEFT, padx=(12, 4))
+        lbl.bind("<Button-1>", lambda e: self.run_update())
+        x = tk.Label(b, text="✕", bg=C["amber"], fg="#2a1f05", font=(self.FONT, 9, "bold"), cursor="hand2", padx=10)
+        x.pack(side=tk.RIGHT); x.bind("<Button-1>", lambda e: self._dismiss_update_banner())
+        self._update_banner = b
+
+    def _dismiss_update_banner(self):
+        if getattr(self, "_update_banner", None) is not None:
+            self._update_banner.destroy(); self._update_banner = None
+
+    def run_update(self):
+        """Scarica la nuova versione, la verifica, salva una copia di sicurezza
+        della corrente e la sostituisce. Non riavvia da solo: lo decide l'utente."""
+        info = getattr(self, "_update_info", None)
+        if not info:
+            self.open_releases_page(); return
+        if getattr(sys, "frozen", False):
+            # eseguibile impacchettato: non ha senso riscrivere il .py
+            messagebox.showinfo(self.tr("u_section"), self.tr("u_frozen"))
+            self.open_releases_page(); return
+        target = os.path.join(self.base_path, MAIN_SCRIPT_NAME)
+        if not os.path.exists(target):
+            messagebox.showerror(self.tr("u_section"), self.tr("u_not_found").format(f=MAIN_SCRIPT_NAME)); return
+        if not messagebox.askyesno(self.tr("u_section"), self.tr("u_confirm").format(v=info["tag"])): return
+        url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{info['tag']}/{MAIN_SCRIPT_NAME}"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": f"AI-Visual-Editor/{APP_VERSION}"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                raw = r.read()
+        except Exception as ex:
+            messagebox.showerror(self.tr("u_section"), f"{self.tr('u_download_failed')}\n\n{ex}"); return
+        # --- verifiche prima di toccare qualsiasi cosa ---
+        try:
+            src = raw.decode("utf-8")
+        except Exception:
+            messagebox.showerror(self.tr("u_section"), self.tr("u_invalid")); return
+        if len(raw) < 50_000 or "class ImageProcessor" not in src:
+            messagebox.showerror(self.tr("u_section"), self.tr("u_invalid")); return
+        try:
+            compile(src, MAIN_SCRIPT_NAME, "exec")     # deve essere Python valido
+        except SyntaxError:
+            messagebox.showerror(self.tr("u_section"), self.tr("u_invalid")); return
+        # --- copia di sicurezza, poi sostituzione ---
+        backup = os.path.join(self.base_path, f"processore_immagini_backup_v{APP_VERSION}.py")
+        try:
+            with open(target, "r", encoding="utf-8") as f: old = f.read()
+            with open(backup, "w", encoding="utf-8", newline="") as f: f.write(old)
+            with open(target, "w", encoding="utf-8", newline="") as f: f.write(src)
+        except Exception as ex:
+            messagebox.showerror(self.tr("u_section"), f"{self.tr('u_write_failed')}\n\n{ex}"); return
+        self._dismiss_update_banner()
+        messagebox.showinfo(self.tr("u_section"),
+            self.tr("u_done").format(v=info["tag"], b=os.path.basename(backup)))
+
+    def open_releases_page(self):
+        import webbrowser
+        try: webbrowser.open(GITHUB_RELEASES_PAGE)
+        except Exception: pass
 
     # --- opzioni persistenti (settings.json) ---
     def _load_settings(self):
@@ -1125,6 +1281,17 @@ class ImageProcessor:
             selectcolor=C["input"], activebackground=C["card"], activeforeground=C["amber"], font=(self.FONT, 8)).pack(anchor="w", pady=(6, 0))
         self._mk(tk.Label, body, "s_rng_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w")
         self._mk(tk.Label, body, "s_metadata_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", pady=(6, 0))
+
+        # --- AGGIORNAMENTI ---
+        body = self._card(page, title_key="u_section", accent=C["amber"])
+        tk.Label(body, text=f"AI Visual Editor  v{APP_VERSION}  ({APP_CODENAME})", bg=C["card"], fg=C["text"],
+                 font=(self.FONT, 9, "bold")).pack(anchor="w")
+        self._mk(tk.Checkbutton, body, "u_check_startup", variable=self.update_check, bg=C["card"], fg=C["amber"],
+            selectcolor=C["input"], activebackground=C["card"], activeforeground=C["amber"], font=(self.FONT, 8)).pack(anchor="w", pady=(4, 0))
+        urow = tk.Frame(body, bg=C["card"]); urow.pack(fill=tk.X, pady=(4, 0))
+        self._mbtn(urow, key="u_check_now", command=lambda: self.check_updates_async(manual=True), kind="normal").pack(side=tk.LEFT, padx=(0, 4))
+        self._mbtn(urow, key="u_open_page", command=self.open_releases_page, kind="normal").pack(side=tk.LEFT)
+        self._mk(tk.Label, body, "u_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", pady=(6, 0))
 
         # --- PRESET DI TESTO ---
         body = self._card(page, title_key="p_presets", accent=C["accent"])

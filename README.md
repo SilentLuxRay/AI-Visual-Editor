@@ -272,6 +272,19 @@ The interface ships in **English and Italian**. To add another language, copy a 
 
 These are remembered between sessions.
 
+### Updates
+
+The program can check whether a newer version has been released, and update itself with one click.
+
+- On startup it quietly asks GitHub for the latest release number. If there is a newer one, a banner appears at the top of the panel; if not, nothing happens and you never notice. **It never blocks startup, and it stays silent when you are offline.**
+- Clicking the banner (or **Check now** in Settings) downloads the new version, checks that it is valid Python and looks like this program, **saves your current version as a backup** next to it, and only then replaces the file. You are asked to restart — nothing is executed behind your back.
+- If anything is off — a failed download, a corrupted file, an error page instead of code — the update is cancelled and **your existing file is left untouched**.
+- The check can be turned off in **Settings → Updates**.
+
+> **Privacy:** the check is a single request to the GitHub releases API to read a version number. Nothing about you, your images or your prompts is ever sent anywhere. The program has no telemetry.
+
+If you edited your own copy of the script, updating will replace your changes — the backup lets you get them back.
+
 ### Model links
 
 ![Model links](screenshots/15_Custom_link.png)

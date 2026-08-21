@@ -132,5 +132,20 @@
   "p_none": "No presets saved",
   "p_hint": "Compose a text in the Editor or Collage with the color,\nsize and alignment you want, then press\n\"Save as preset\": you'll find it in the Preset dropdown.",
   "show_rng": "Include RNG in parameters",
-  "s_rng_hint": "RNG tells whether noise was generated on CPU or GPU:\nit helps anyone trying to reproduce your generation."
+  "s_rng_hint": "RNG tells whether noise was generated on CPU or GPU:\nit helps anyone trying to reproduce your generation.",
+  "u_section": "⬆️  UPDATES",
+  "u_check_startup": "Check on startup",
+  "u_check_now": "Check now",
+  "u_open_page": "Open the page",
+  "u_hint": "The check contacts GitHub only to read the latest version\nnumber. Nothing of yours is ever sent.",
+  "u_available": "⬆  Version {v} is available — click to update",
+  "u_up_to_date": "You are already on the latest version (v{v}).",
+  "u_check_failed": "Could not check for updates.\nCheck your connection and try again.",
+  "u_confirm": "Download and install version {v}?\n\nYour current version will be kept as a backup.\nIf you edited the file, your changes will be replaced.",
+  "u_download_failed": "Download failed.",
+  "u_invalid": "The downloaded file is not valid: update cancelled.\nNothing has been changed.",
+  "u_write_failed": "Could not write the file: update cancelled.",
+  "u_done": "Updated to version {v}.\n\nBackup: {b}\n\nClose and reopen the program to use the new version.",
+  "u_frozen": "You are running the packaged version (.exe): download the new package from the releases page.",
+  "u_not_found": "File {f} not found next to the program: update cancelled."
 }

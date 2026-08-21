@@ -132,5 +132,20 @@
   "p_none": "Nessun preset salvato",
   "p_hint": "Componi un testo nell'Editor o nel Collage con colore,\ndimensione e allineamento che vuoi, poi premi\n\"Salva come preset\": lo ritrovi nella tendina Preset.",
   "show_rng": "Includi RNG nei parametri",
-  "s_rng_hint": "RNG dice se il rumore è stato generato su CPU o GPU:\nserve a chi vuole riprodurre la tua generazione."
+  "s_rng_hint": "RNG dice se il rumore è stato generato su CPU o GPU:\nserve a chi vuole riprodurre la tua generazione.",
+  "u_section": "⬆️  AGGIORNAMENTI",
+  "u_check_startup": "Controlla all'avvio",
+  "u_check_now": "Controlla ora",
+  "u_open_page": "Apri la pagina",
+  "u_hint": "Il controllo contatta GitHub solo per leggere il numero\ndell'ultima versione. Non viene inviato nulla di tuo.",
+  "u_available": "⬆  Disponibile la versione {v} — clicca per aggiornare",
+  "u_up_to_date": "Stai già usando l'ultima versione (v{v}).",
+  "u_check_failed": "Impossibile controllare gli aggiornamenti.\nControlla la connessione e riprova.",
+  "u_confirm": "Scaricare e installare la versione {v}?\n\nLa versione attuale verrà salvata come copia di sicurezza.\nSe hai modificato il file, le tue modifiche verranno sostituite.",
+  "u_download_failed": "Scaricamento non riuscito.",
+  "u_invalid": "Il file scaricato non è valido: aggiornamento annullato.\nNiente è stato modificato.",
+  "u_write_failed": "Impossibile scrivere il file: aggiornamento annullato.",
+  "u_done": "Aggiornato alla versione {v}.\n\nCopia di sicurezza: {b}\n\nChiudi e riapri il programma per usare la nuova versione.",
+  "u_frozen": "Stai usando la versione compilata (.exe): scarica il nuovo pacchetto dalla pagina delle release.",
+  "u_not_found": "File {f} non trovato accanto al programma: aggiornamento annullato."
 }
