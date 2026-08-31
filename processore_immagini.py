@@ -5,6 +5,8 @@ import json
 import math
 import fnmatch
 import threading
+import queue
+import time
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -717,8 +719,14 @@ class ImageProcessor:
 
     def check_updates_async(self, manual=False):
         """Interroga GitHub in un thread separato: l'avvio non deve mai restare
-        appeso per colpa della rete. Il thread NON tocca widget — il risultato
-        torna al thread principale con root.after()."""
+        appeso per colpa della rete.
+
+        Il thread NON tocca né i widget né Tk: deposita il risultato in una coda,
+        e il thread principale la controlla con after(). Chiamare root.after() dal
+        thread di lavoro sembrerebbe più semplice, ma Tk non è thread-safe e quella
+        chiamata può essere ignorata senza dare errore — l'avviso non comparirebbe."""
+        if not hasattr(self, "_update_q"):
+            self._update_q = queue.Queue()
         def worker():
             info, err = None, None
             try:
@@ -732,9 +740,20 @@ class ImageProcessor:
                         "url": str(data.get("html_url") or GITHUB_RELEASES_PAGE)}
             except Exception as ex:
                 err = str(ex)
-            try: self.root.after(0, lambda: self._on_update_checked(info, err, manual))
-            except Exception: pass
+            self._update_q.put((info, err, manual))
         threading.Thread(target=worker, daemon=True).start()
+        self._poll_update_result(deadline=time.time() + 30)
+
+    def _poll_update_result(self, deadline):
+        """Controlla la coda dal thread principale, finché arriva il risultato
+        o scade il tempo (così non si continua a controllare all'infinito)."""
+        try:
+            info, err, manual = self._update_q.get_nowait()
+        except queue.Empty:
+            if time.time() < deadline:
+                self.root.after(200, lambda: self._poll_update_result(deadline))
+            return
+        self._on_update_checked(info, err, manual)
 
     def _on_update_checked(self, info, err, manual):
         """Gira nel thread della UI: qui si può toccare l'interfaccia."""
