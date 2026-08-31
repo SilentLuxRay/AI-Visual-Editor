@@ -179,6 +179,7 @@ class ImageProcessor:
             self.collage_frame_enabled = tk.BooleanVar(value=False)
             self._collage_frame_img = None       # PIL RGBA della cornice scelta
             self._collage_frame_opening = None    # bbox (x0,y0,x1,y1) dell'apertura trasparente
+            self.collage_frame_fit = tk.StringVar(value="inside")  # "inside" | "fill" (unire varianti)
             # --- modalità layout: "cols" (colonne automatiche) | "free" (editor libero) ---
             self.collage_mode = tk.StringVar(value="cols")
             self.collage_dir = tk.StringVar(value="cols")   # griglia automatica: "cols" (verticale) | "rows" (orizzontale)
@@ -274,7 +275,9 @@ class ImageProcessor:
                 "c_signature": "FIRMA", "c_sig_apply": "Applica firma", "c_sig_size": "Dim %",
                 "c_hint_sig": "💡 Trascina la firma nell'anteprima per spostarla.",
                 "c_frame": "CORNICE", "c_frame_apply": "Applica cornice",
-                "c_hint_frame": "💡 Il collage viene rimpicciolito e centrato dentro\nl'apertura della cornice. Il file finale ha la\ndimensione della cornice.",
+                "c_frame_fit": "Come applicarla:",
+                "c_fit_inside": "Dentro l'apertura", "c_fit_fill": "Riempi la cornice (unisci varianti)",
+                "c_hint_frame": "💡 \"Dentro l'apertura\": il collage viene rimpicciolito e\ncentrato nella cornice.\n\"Riempi\": il collage copre tutta la cornice e la decorazione\nva sopra — così unisci più varianti della stessa immagine\nin un'unica miniatura. Metti Spazio a 0 e usa lo stesso\nformato della cornice per non perdere nulla ai bordi.",
                 "c_textfile": "FILE DI TESTO",
                 "c_hint_civitai": "💡 Aggiunge il link di ricerca Civitai sotto ogni hash.",
                 "c_save_all": "💾  SALVA COLLAGE",
@@ -382,7 +385,9 @@ class ImageProcessor:
             "c_signature": "SIGNATURE", "c_sig_apply": "Apply signature", "c_sig_size": "Size %",
             "c_hint_sig": "💡 Drag the signature in the preview to move it.",
             "c_frame": "FRAME", "c_frame_apply": "Apply frame",
-            "c_hint_frame": "💡 The collage is scaled down and centred inside\nthe frame opening. The final file has the\nframe's size.",
+            "c_frame_fit": "How to apply it:",
+            "c_fit_inside": "Inside the opening", "c_fit_fill": "Fill the frame (merge variants)",
+            "c_hint_frame": "💡 \"Inside the opening\": the collage is scaled down and\ncentred in the frame.\n\"Fill\": the collage covers the whole frame and the artwork\ngoes on top — this is how you merge several variants of the\nsame image into one thumbnail. Set Gap to 0 and use the\nframe's aspect ratio so nothing is cut off at the edges.",
             "c_textfile": "TEXT FILE",
             "c_hint_civitai": "💡 Adds the Civitai search link under each hash.",
             "c_save_all": "💾  SAVE COLLAGE",
@@ -2097,6 +2102,12 @@ class ImageProcessor:
         body = self._card(side, title_key="c_frame", accent=C["teal"])
         self.combo_cornici_collage = self._combo(body, width=10); self.combo_cornici_collage.pack(fill=tk.X, pady=(0, 4)); self.combo_cornici_collage.bind("<<ComboboxSelected>>", self.collage_change_frame)
         self._mk(tk.Checkbutton, body, "c_frame_apply", variable=self.collage_frame_enabled, command=self._render_collage_preview, bg=C["card"], fg=C["teal"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["teal"], font=(self.FONT, 8)).pack(anchor="w")
+        ffit = tk.Frame(body, bg=C["card"]); ffit.pack(fill=tk.X, pady=(4, 0))
+        self._mk(tk.Label, ffit, "c_frame_fit", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(anchor="w")
+        self._mk(tk.Radiobutton, ffit, "c_fit_inside", variable=self.collage_frame_fit, value="inside", command=self._render_collage_preview,
+            bg=C["card"], fg=C["text"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["text"], font=(self.FONT, 8)).pack(anchor="w")
+        self._mk(tk.Radiobutton, ffit, "c_fit_fill", variable=self.collage_frame_fit, value="fill", command=self._render_collage_preview,
+            bg=C["card"], fg=C["amber"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["amber"], font=(self.FONT, 8)).pack(anchor="w")
         self._mk(tk.Label, body, "c_hint_frame", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", pady=(6, 0))
 
         # --- TESTI sul collage ---
@@ -2611,6 +2622,40 @@ class ImageProcessor:
             if crop.width <= 0 or crop.height <= 0: continue
             img.paste(self.collage_outline_color, (ox, oy), crop)
 
+    def _compose_with_frame(self, base_rgb, frame_rgba):
+        """Unisce collage e cornice. Ritorna (immagine, scala_applicata, (offset_x, offset_y)),
+        dove l'offset è la posizione dell'angolo (0,0) del collage dentro il risultato —
+        serve all'anteprima per sapere dove disegnare i riquadri delle celle.
+
+        Due modalità:
+        • inside → il collage viene rimpicciolito DENTRO l'apertura trasparente (default)
+        • fill   → il collage RIEMPIE tutta la cornice e la decorazione ci va sopra,
+                   come la miniatura dell'Editor. Serve a unire più varianti in un'unica
+                   cornice. Scala per coprire e ritaglia il di più al centro, così le
+                   proporzioni non vengono mai deformate."""
+        fw, fh = frame_rgba.size
+        if self.collage_frame_fit.get() == "fill":
+            s = max(fw / base_rgb.width, fh / base_rgb.height)
+            nw, nh = max(1, int(round(base_rgb.width * s))), max(1, int(round(base_rgb.height * s)))
+            scaled = base_rgb.resize((nw, nh), Image.Resampling.LANCZOS)
+            offx, offy = (nw - fw) // 2, (nh - fh) // 2
+            out = scaled.crop((offx, offy, offx + fw, offy + fh))
+            place = (-offx, -offy)
+        else:
+            # l'apertura è memorizzata nelle coordinate della cornice a piena risoluzione:
+            # va riscalata se qui arriva una cornice ridotta (anteprima)
+            k = fw / max(1, self._collage_frame_img.width) if self._collage_frame_img else 1.0
+            src = self._collage_frame_opening or (0, 0, fw, fh)
+            ox0, oy0, ox1, oy1 = [v * k for v in src]
+            inner_w = max(1, int(ox1 - ox0)); inner_h = max(1, int(oy1 - oy0))
+            s = min(inner_w / base_rgb.width, inner_h / base_rgb.height)
+            nw, nh = max(1, int(base_rgb.width * s)), max(1, int(base_rgb.height * s))
+            coll = base_rgb.resize((nw, nh), Image.Resampling.LANCZOS)
+            out = Image.new("RGB", (fw, fh), self.collage_gutter_color)
+            place = (int(ox0) + (inner_w - nw) // 2, int(oy0) + (inner_h - nh) // 2)
+            out.paste(coll, place)
+        return Image.alpha_composite(out.convert("RGBA"), frame_rgba).convert("RGB"), s, place
+
     def _paste_collage_texts(self, img, W):
         """Incolla i testi del collage. W = larghezza del documento finale: il rapporto
         img.width/W è il fattore che riporta corpo del font e contorno alla scala corrente."""
@@ -2665,16 +2710,7 @@ class ImageProcessor:
             if fscale <= 0: fscale = 0.1
             fpw, fph = max(1, int(fw * fscale)), max(1, int(fh * fscale))
             frame_prev = frame.resize((fpw, fph), Image.Resampling.LANCZOS)
-            ox0, oy0, ox1, oy1 = self._collage_frame_opening or (0, 0, fw, fh)
-            opx, opy = int(ox0 * fscale), int(oy0 * fscale)
-            opw, oph = max(1, int((ox1 - ox0) * fscale)), max(1, int((oy1 - oy0) * fscale))
-            s = min(opw / cpw, oph / cph)
-            nw, nh = max(1, int(cpw * s)), max(1, int(cph * s))
-            collage_scaled = collage_img.resize((nw, nh), Image.Resampling.LANCZOS)
-            place_x = opx + (opw - nw) // 2; place_y = opy + (oph - nh) // 2
-            base_prev = Image.new("RGB", (fpw, fph), self.collage_gutter_color)
-            base_prev.paste(collage_scaled, (place_x, place_y))
-            disp = Image.alpha_composite(base_prev.convert("RGBA"), frame_prev).convert("RGB")
+            disp, s, (place_x, place_y) = self._compose_with_frame(collage_img, frame_prev)
             dpw, dph = fpw, fph
 
         # 3) mostra centrato
@@ -2916,17 +2952,10 @@ class ImageProcessor:
             img_path = os.path.join(self.output_folder, f"collage_{ts}.png")
             base.save(img_path, "PNG", optimize=self.optimize_png.get())
             saved.append(f"collage_{ts}.png  ({base.width}×{base.height})")
-            # 2) versione incorniciata: collage rimpicciolito dentro l'apertura, dimensioni della cornice
+            # 2) versione incorniciata — stessa funzione usata dall'anteprima, quindi identica
             if self.collage_frame_enabled.get() and self._collage_frame_img is not None:
                 frame = self._collage_frame_img; fw, fh = frame.size
-                ox0, oy0, ox1, oy1 = self._collage_frame_opening or (0, 0, fw, fh)
-                inner_w = max(1, ox1 - ox0); inner_h = max(1, oy1 - oy0)
-                sfr = min(inner_w / base.width, inner_h / base.height)
-                nw, nh = max(1, int(base.width * sfr)), max(1, int(base.height * sfr))
-                coll = base.resize((nw, nh), Image.Resampling.LANCZOS)
-                out = Image.new("RGB", (fw, fh), self.collage_gutter_color)
-                out.paste(coll, (ox0 + (inner_w - nw) // 2, oy0 + (inner_h - nh) // 2))
-                framed = Image.alpha_composite(out.convert("RGBA"), frame).convert("RGB")
+                framed, _s, _p = self._compose_with_frame(base, frame)
                 fname = os.path.splitext(self.combo_cornici_collage.get())[0] or "cornice"
                 framed_path = os.path.join(self.output_folder, f"collage_{ts}_{fname}.png")
                 framed.save(framed_path, "PNG", optimize=self.optimize_png.get())

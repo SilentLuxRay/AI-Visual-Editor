@@ -79,7 +79,7 @@
   "c_hint_sig": "💡 Trascina la firma nell'anteprima per spostarla.",
   "c_frame": "CORNICE",
   "c_frame_apply": "Applica cornice",
-  "c_hint_frame": "💡 Il collage viene rimpicciolito e centrato dentro\nl'apertura della cornice. Il file finale ha la\ndimensione della cornice.",
+  "c_hint_frame": "💡 \"Dentro l'apertura\": il collage viene rimpicciolito e\ncentrato nella cornice.\n\"Riempi\": il collage copre tutta la cornice e la decorazione\nva sopra — così unisci più varianti della stessa immagine\nin un'unica miniatura. Metti Spazio a 0 e usa lo stesso\nformato della cornice per non perdere nulla ai bordi.",
   "c_textfile": "FILE DI TESTO",
   "c_hint_civitai": "💡 Aggiunge il link di ricerca Civitai sotto ogni hash.",
   "c_save_all": "💾  SALVA COLLAGE",
@@ -147,5 +147,8 @@
   "u_write_failed": "Impossibile scrivere il file: aggiornamento annullato.",
   "u_done": "Aggiornato alla versione {v}.\n\nCopia di sicurezza: {b}\n\nChiudi e riapri il programma per usare la nuova versione.",
   "u_frozen": "Stai usando la versione compilata (.exe): scarica il nuovo pacchetto dalla pagina delle release.",
-  "u_not_found": "File {f} non trovato accanto al programma: aggiornamento annullato."
+  "u_not_found": "File {f} non trovato accanto al programma: aggiornamento annullato.",
+  "c_frame_fit": "Come applicarla:",
+  "c_fit_inside": "Dentro l'apertura",
+  "c_fit_fill": "Riempi la cornice (unisci varianti)"
 }

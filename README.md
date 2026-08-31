@@ -241,7 +241,14 @@ Layouts you like can be saved as **presets** and reapplied to any other set of i
 
 The collage has its own **Signature** (drag it in the preview) and its own **Text** layers, sharing the same presets as the Editor.
 
-**Frame** works differently here: the finished collage is **scaled down and centred inside the frame's opening**, which is detected automatically, and the final file takes the frame's size. Nothing is cropped.
+**Frame** can be applied in two ways, and the final file always takes the frame's size:
+
+- **Inside the opening** — the finished collage is scaled down and centred inside the frame's transparent opening, which is detected automatically. Nothing is cropped.
+- **Fill the frame** — the collage covers the whole frame and the artwork is laid on top, exactly like the Editor's thumbnail.
+
+The second one is what you want when you publish **variants of the same picture** — male and female, black fur and white fur — and would like them merged into a single framed thumbnail. Load the variants, set **Gap** to 0, use the frame's aspect ratio so nothing is cut at the edges, and you get one thumbnail showing them side by side. In **Free** layout you can even split them diagonally instead of straight.
+
+As a bonus, the text file will contain the prompt of every variant, numbered.
 
 ### Saving
 

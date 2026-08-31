@@ -79,7 +79,7 @@
   "c_hint_sig": "💡 Drag the signature in the preview to move it.",
   "c_frame": "FRAME",
   "c_frame_apply": "Apply frame",
-  "c_hint_frame": "💡 The collage is scaled down and centred inside\nthe frame opening. The final file has the\nframe's size.",
+  "c_hint_frame": "💡 \"Inside the opening\": the collage is scaled down and\ncentred in the frame.\n\"Fill\": the collage covers the whole frame and the artwork\ngoes on top — this is how you merge several variants of the\nsame image into one thumbnail. Set Gap to 0 and use the\nframe's aspect ratio so nothing is cut off at the edges.",
   "c_textfile": "TEXT FILE",
   "c_hint_civitai": "💡 Adds the Civitai search link under each hash.",
   "c_save_all": "💾  SAVE COLLAGE",
@@ -147,5 +147,8 @@
   "u_write_failed": "Could not write the file: update cancelled.",
   "u_done": "Updated to version {v}.\n\nBackup: {b}\n\nClose and reopen the program to use the new version.",
   "u_frozen": "You are running the packaged version (.exe): download the new package from the releases page.",
-  "u_not_found": "File {f} not found next to the program: update cancelled."
+  "u_not_found": "File {f} not found next to the program: update cancelled.",
+  "c_frame_fit": "How to apply it:",
+  "c_fit_inside": "Inside the opening",
+  "c_fit_fill": "Fill the frame (merge variants)"
 }
