@@ -236,7 +236,7 @@ class ImageProcessor:
                 "p_save": "⭐  Salva come preset", "p_name": "Nome del preset:", "p_none": "Nessun preset salvato",
                 "p_hint": "Componi un testo nell'Editor o nel Collage con colore,\ndimensione e allineamento che vuoi, poi premi\n\"Salva come preset\": lo ritrovi nella tendina Preset.",
                 "c_dir": "Direzione:", "c_dir_v": "Colonne", "c_dir_h": "Righe", "c_rows": "righe",
-                "c_diagonal": "◣  Diagonale", "c_slant": "Pendenza %",
+                "c_diagonal": "◣  Diagonale", "c_slant": "Pendenza % (100 = spigolo a spigolo)",
                 # --- TAB IMPOSTAZIONI ---
                 "s_tab": "  ⚙  Impostazioni  ", "s_title": "⚙  IMPOSTAZIONI",
                 "s_language": "🌐  LINGUA",
@@ -347,7 +347,7 @@ class ImageProcessor:
             "p_save": "⭐  Save as preset", "p_name": "Preset name:", "p_none": "No presets saved",
             "p_hint": "Compose a text in the Editor or Collage with the color,\nsize and alignment you want, then press\n\"Save as preset\": you'll find it in the Preset dropdown.",
             "c_dir": "Direction:", "c_dir_v": "Columns", "c_dir_h": "Rows", "c_rows": "rows",
-            "c_diagonal": "◣  Diagonal", "c_slant": "Slant %",
+            "c_diagonal": "◣  Diagonal", "c_slant": "Slant % (100 = corner to corner)",
             # --- SETTINGS TAB ---
             "s_tab": "  ⚙  Settings  ", "s_title": "⚙  SETTINGS",
             "s_language": "🌐  LANGUAGE",
@@ -2474,7 +2474,10 @@ class ImageProcessor:
         horizontal = self.collage_dir.get() == "rows"
         span = (y1 - y0) if horizontal else (x1 - x0)
         step = span / n
-        d = max(0.0, min(0.49, slant / 200.0)) * step   # metà scarto per lato, mai fino a ribaltare
+        # scarto del divisore rispetto alla posizione dritta, per lato.
+        # slant 100% => d = step: con 2 immagini il taglio va da spigolo a spigolo.
+        # Oltre step i divisori scavalcherebbero il bordo e le celle si annoderebbero.
+        d = max(0.0, min(1.0, slant / 100.0)) * step
         a0, a1 = (y0, y1) if horizontal else (x0, x1)
         def divisore(i):
             """(inizio, fine) del divisore i: dritto se è un bordo, inclinato se interno."""
