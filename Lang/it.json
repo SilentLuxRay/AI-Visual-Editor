@@ -150,5 +150,7 @@
   "u_not_found": "File {f} non trovato accanto al programma: aggiornamento annullato.",
   "c_frame_fit": "Come applicarla:",
   "c_fit_inside": "Dentro l'apertura",
-  "c_fit_fill": "Riempi la cornice (unisci varianti)"
+  "c_fit_fill": "Riempi la cornice (unisci varianti)",
+  "c_diagonal": "◣  Diagonale",
+  "c_slant": "Pendenza %"
 }

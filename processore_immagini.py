@@ -187,6 +187,7 @@ class ImageProcessor:
             self.free_cells = []
             self.free_sel = None              # indice cella selezionata
             self.free_rot = tk.IntVar(value=0)  # rotazione della cella selezionata (UI)
+            self.free_slant = tk.IntVar(value=40)  # pendenza dei tagli diagonali, in %
             self._free_action = None           # "move" | "resize" | "pan"
             self._free_handle = None           # indice angolo in resize
             self._free_start = None            # snapshot per il drag
@@ -235,6 +236,7 @@ class ImageProcessor:
                 "p_save": "⭐  Salva come preset", "p_name": "Nome del preset:", "p_none": "Nessun preset salvato",
                 "p_hint": "Componi un testo nell'Editor o nel Collage con colore,\ndimensione e allineamento che vuoi, poi premi\n\"Salva come preset\": lo ritrovi nella tendina Preset.",
                 "c_dir": "Direzione:", "c_dir_v": "Colonne", "c_dir_h": "Righe", "c_rows": "righe",
+                "c_diagonal": "◣  Diagonale", "c_slant": "Pendenza %",
                 # --- TAB IMPOSTAZIONI ---
                 "s_tab": "  ⚙  Impostazioni  ", "s_title": "⚙  IMPOSTAZIONI",
                 "s_language": "🌐  LINGUA",
@@ -345,6 +347,7 @@ class ImageProcessor:
             "p_save": "⭐  Save as preset", "p_name": "Preset name:", "p_none": "No presets saved",
             "p_hint": "Compose a text in the Editor or Collage with the color,\nsize and alignment you want, then press\n\"Save as preset\": you'll find it in the Preset dropdown.",
             "c_dir": "Direction:", "c_dir_v": "Columns", "c_dir_h": "Rows", "c_rows": "rows",
+            "c_diagonal": "◣  Diagonal", "c_slant": "Slant %",
             # --- SETTINGS TAB ---
             "s_tab": "  ⚙  Settings  ", "s_title": "⚙  SETTINGS",
             "s_language": "🌐  LANGUAGE",
@@ -2078,6 +2081,10 @@ class ImageProcessor:
         br = tk.Frame(self.free_panel, bg=C["card"]); br.pack(fill=tk.X, pady=2)
         self._mbtn(br, key="c_straighten", command=self._free_straighten, kind="normal").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
         self._mbtn(br, key="c_reset_cols", command=self._free_reset_from_cols, kind="normal").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 0))
+        dr = tk.Frame(self.free_panel, bg=C["card"]); dr.pack(fill=tk.X, pady=2)
+        self._mbtn(dr, key="c_diagonal", command=self._free_diagonal, kind="primary").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        self._mk(tk.Label, dr, "c_slant", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(side=tk.LEFT)
+        self._spin(dr, from_=0, to=100, increment=5, textvariable=self.free_slant, width=4, command=self._free_diagonal).pack(side=tk.LEFT, padx=3)
         pr = tk.Frame(self.free_panel, bg=C["card"]); pr.pack(fill=tk.X, pady=(6, 2))
         self._mk(tk.Label, pr, "c_preset", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(anchor="w")
         self.combo_layouts = self._combo(self.free_panel, width=10); self.combo_layouts.pack(fill=tk.X, pady=2)
@@ -2452,6 +2459,50 @@ class ImageProcessor:
             cells = self._default_free_cells(W, H, g, n)
             for i in range(len(self.free_cells), n):
                 self.free_cells.append(cells[i] if i < len(cells) else {"pts": self._rect_pts(0.5, 0.5, 0.3, 0.3)})
+
+    def _diagonal_free_cells(self, W, H, g, n, slant):
+        """Celle a divisori inclinati, nel verso scelto in 'Direzione'.
+
+        I divisori ESTERNI restano dritti sul bordo pagina: se si inclinassero anche
+        quelli, agli angoli resterebbero dei triangoli vuoti. Si inclinano solo i
+        divisori interni, così la pagina resta coperta e con 2 immagini si ottiene
+        il classico taglio in diagonale."""
+        if n <= 0: return []
+        half = g / 2.0
+        x0 = half / W; x1 = 1.0 - half / W
+        y0 = half / H; y1 = 1.0 - half / H
+        horizontal = self.collage_dir.get() == "rows"
+        span = (y1 - y0) if horizontal else (x1 - x0)
+        step = span / n
+        d = max(0.0, min(0.49, slant / 200.0)) * step   # metà scarto per lato, mai fino a ribaltare
+        a0, a1 = (y0, y1) if horizontal else (x0, x1)
+        def divisore(i):
+            """(inizio, fine) del divisore i: dritto se è un bordo, inclinato se interno."""
+            base = a0 + i * step
+            if i == 0 or i == n: return a0 if i == 0 else a1, a0 if i == 0 else a1
+            return base + d, base - d
+        out = []
+        for i in range(n):
+            s_a, e_a = divisore(i); s_b, e_b = divisore(i + 1)
+            if horizontal:
+                # divisori orizzontali inclinati: variano da sinistra (s) a destra (e)
+                out.append({"pts": [[x0, s_a], [x1, e_a], [x1, e_b], [x0, s_b]]})
+            else:
+                # divisori verticali inclinati: variano dall'alto (s) al basso (e)
+                out.append({"pts": [[s_a, y0], [s_b, y0], [e_b, y1], [e_a, y1]]})
+        return out
+
+    def _free_diagonal(self):
+        """Rigenera le vignette con i tagli in diagonale."""
+        try:
+            W = max(1, self.collage_w.get()); H = max(1, self.collage_h.get()); g = max(0, self.collage_gutter.get())
+            slant = max(0, min(100, int(self.free_slant.get())))
+        except Exception:
+            return
+        n = len(self.collage_images)
+        if n <= 0: return
+        self.free_cells = self._diagonal_free_cells(W, H, g, n, slant)
+        self.free_sel = None; self._render_collage_preview()
 
     def _default_free_cells(self, W, H, g, n):
         """Celle che si TOCCANO, con mezzo spazio di margine dal bordo pagina, nella direzione

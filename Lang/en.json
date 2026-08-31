@@ -150,5 +150,7 @@
   "u_not_found": "File {f} not found next to the program: update cancelled.",
   "c_frame_fit": "How to apply it:",
   "c_fit_inside": "Inside the opening",
-  "c_fit_fill": "Fill the frame (merge variants)"
+  "c_fit_fill": "Fill the frame (merge variants)",
+  "c_diagonal": "◣  Diagonal",
+  "c_slant": "Slant %"
 }

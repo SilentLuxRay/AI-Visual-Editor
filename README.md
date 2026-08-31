@@ -230,6 +230,13 @@ The outline sits **inside** the panel, right at the edge of the photo, so the ga
 | **⟲ ⟳** | rotates the panel by the step you set |
 | **Straighten** | turns a distorted panel back into a rectangle |
 | **Reset to columns** | rebuilds the default grid |
+| **Diagonal** | rebuilds the layout with slanted cuts, with an adjustable **Slant %** |
+
+**Diagonal** is the quickest way to get comic-style panels: it tilts the dividers between the
+panels while keeping the outer edges straight against the page, so no empty corners appear.
+It follows the Direction setting, so it slants the vertical dividers in Columns and the
+horizontal ones in Rows. With two images it gives you the classic diagonal split — ideal for
+merging two variants of the same picture.
 
 The image is **cropped** by the shape, never stretched.
 
