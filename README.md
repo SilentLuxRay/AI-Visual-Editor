@@ -354,6 +354,8 @@ Steps: 30, Sampler: DPM++ 2M, CFG scale: 7, Seed: 12345, Size: 512x768, Version:
 Models:
 Model: myCoolModel_v3 - Hash: 02273329cd
   https://civitai.red/search/models?sortBy=models_v9&query=02273329cd
+Refiner: someRefiner_v1 - Hash: 3e15ba0038
+  https://civitai.red/search/models?sortBy=models_v9&query=3e15ba0038
 lora: styleLora - Hash: abc123def4
   https://your-site.example/style-lora
 
@@ -362,6 +364,8 @@ Your footer note goes here.
 ```
 
 Duplicated fields such as `Hires prompt` — which simply repeats the positive prompt — are removed automatically, as are the internal hash blocks.
+
+If you used a **refiner**, it is listed under `Models:` on its own `Refiner:` line, with its hash pulled out of the square brackets the metadata writes it in, and with a link of its own. `Refiner switch at` stays among the parameters, since it describes the generation rather than the model.
 
 ---
 

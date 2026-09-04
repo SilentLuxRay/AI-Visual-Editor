@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.26"
-APP_CODENAME = "Auto Update"
+APP_VERSION = "2.27"
+APP_CODENAME = "Refiner"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -529,6 +529,18 @@ class ImageProcessor:
                 m_list.append(f"Model: {m_name} - Hash: {m_hash if m_hash else 'N/A'}")
                 lnk = self._model_link(m_name, m_hash)
                 if lnk: m_list.append(f"  {lnk}")
+            # Refiner — scritto in modo diverso dal modello principale:
+            # "Refiner: nome_del_modello [hash]", con l'hash fra parentesi quadre.
+            rf = re.search(r"Refiner:\s*([^,]+)", t_part, re.I)
+            if rf:
+                raw = rf.group(1).strip()
+                rh = re.search(r"\[([a-f0-9]+)\]\s*$", raw, re.I)
+                r_hash = rh.group(1).strip() if rh else ""
+                r_name = re.sub(r"\s*\[[a-f0-9]+\]\s*$", "", raw, flags=re.I).strip()
+                if r_name:
+                    m_list.append(f"Refiner: {r_name} - Hash: {r_hash if r_hash else 'N/A'}")
+                    lnk = self._model_link(r_name, r_hash)
+                    if lnk: m_list.append(f"  {lnk}")
             h_m = re.search(r"Hashes: (\{.*?\})", t_part)
             if h_m:
                 try:
@@ -544,6 +556,9 @@ class ImageProcessor:
         cp = t_part
         patterns = [r",?\s*sv_prompt: \".*?\"", r",?\s*sv_prompt: [^,]+", r",?\s*Model hash: [a-f0-9]+",
                     r",?\s*Model: [^,]+", r",?\s*Hashes: \{.*?\}", r",?\s*Lora hashes: \".*?\"",
+                    # il refiner passa nei Models; "Refiner switch at" resta invece
+                    # fra i parametri, perché serve a riprodurre la generazione
+                    r",?\s*Refiner: [^,]+",
                     r",?\s*Hires prompt: \".*?\"", r",?\s*Hires negative prompt: \".*?\""]
         # RNG (rumore generato su CPU o GPU) incide sulla riproducibilità tra setup diversi:
         # si tiene solo se l'utente lo chiede dalle Impostazioni.
