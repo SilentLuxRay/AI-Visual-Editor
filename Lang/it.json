@@ -131,8 +131,6 @@
   "p_name": "Nome del preset:",
   "p_none": "Nessun preset salvato",
   "p_hint": "Componi un testo nell'Editor o nel Collage con colore,\ndimensione e allineamento che vuoi, poi premi\n\"Salva come preset\": lo ritrovi nella tendina Preset.",
-  "show_rng": "Includi RNG nei parametri",
-  "s_rng_hint": "RNG dice se il rumore è stato generato su CPU o GPU:\nserve a chi vuole riprodurre la tua generazione.",
   "u_section": "⬆️  AGGIORNAMENTI",
   "u_check_startup": "Controlla all'avvio",
   "u_check_now": "Controlla ora",
@@ -152,5 +150,16 @@
   "c_fit_inside": "Dentro l'apertura",
   "c_fit_fill": "Riempi la cornice (unisci varianti)",
   "c_diagonal": "◣  Diagonale",
-  "c_slant": "Pendenza %"
+  "c_slant": "Pendenza %",
+  "p_section": "🧮  PARAMETRI NEL TXT",
+  "p_enable": "Tieni solo i parametri scelti",
+  "p_add": "Aggiungi",
+  "p_from_image": "Leggi dall'immagine",
+  "p_add_custom": "Aggiungi scritto a mano",
+  "p_reset": "Ripristina",
+  "p_clear": "Svuota",
+  "p_empty": "Nessun parametro selezionato:\nla sezione Parameters uscirà vuota.",
+  "p_no_image": "Carica prima un'immagine con i metadati.",
+  "p_nothing_new": "Tutti i parametri di questa immagine sono già in lista.",
+  "p_add_found": "Trovati {n} parametri non ancora in lista:\n{l}\n\nAggiungerli?"
 }

@@ -12,12 +12,52 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.27"
-APP_CODENAME = "Refiner"
+APP_VERSION = "2.28"
+APP_CODENAME = "Parameters"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
 MAIN_SCRIPT_NAME = "processore_immagini.py"
+
+# --- catalogo dei parametri che possono comparire nei metadati ---------------
+# Ricavato dal sorgente del webui e dalle estensioni, non a memoria. Serve solo
+# a popolare il menu a tendina: qualunque nome si può comunque scrivere a mano,
+# e i jolly * ? sono ammessi (indispensabili per ADetailer, che dalla seconda
+# unità in poi aggiunge un suffisso ordinale: "ADetailer model 2nd", "3rd"…).
+PARAM_CATALOG = {
+    "Base": ["Steps", "Sampler", "Schedule type", "CFG scale", "Distilled CFG Scale", "Seed", "Size",
+             "Model", "Model hash", "VAE", "Clip skip", "Denoising strength", "Emphasis", "RNG",
+             "Tiling", "Version", "User", "Face restoration", "ENSD", "Init image hash",
+             "Token merging ratio", "Token merging ratio hr", "Conditional mask weight",
+             "Variation seed", "Variation seed strength", "Seed resize from",
+             "SGM noise multiplier", "Noise multiplier", "Extra noise", "Pad conds",
+             "Skip Early CFG", "NGMS", "NGMS all steps", "Downcast alphas_cumprod"],
+    "Hires fix": ["Hires upscaler", "Hires steps", "Hires CFG Scale", "Hires upscale", "Hires resize",
+                  "Hires sampler", "Hires schedule type", "Hires checkpoint", "Hires prompt",
+                  "Hires negative prompt", "Hires Distilled CFG Scale", "Hires Shift", "Hires Module 1"],
+    "Forge Neo": ["Distilled CFG Scale", "Emphasis", "MaHiRo", "Rescale CFG", "Mask rounding",
+                  "NGMS", "NGMS all steps", "Skip Early CFG", "Downcast alphas_cumprod",
+                  "Hires Module 1", "Hires Shift", "Lora hashes", "TI hashes", "Hashes"],
+    "ControlNet": ["ControlNet*", "ControlNet 0", "ControlNet 1", "ControlNet 2"],
+    "Refiner": ["Refiner", "Refiner switch at"],
+    "Inpaint / img2img": ["Mask blur", "Mask mode", "Masked content", "Masked area padding",
+                          "Inpaint area", "Original Size"],
+    "Sigma / schedule": ["Schedule max sigma", "Schedule min sigma", "Schedule rho", "Sigma churn",
+                         "Sigma noise", "Sigma tmax", "Sigma tmin", "Beta schedule alpha",
+                         "Beta schedule beta", "Noise Schedule", "Discard penultimate sigma"],
+    "Ultimate SD upscale": ["Ultimate SD upscale*", "Ultimate SD upscale upscaler",
+                            "Ultimate SD upscale tile_width", "Ultimate SD upscale tile_height",
+                            "Ultimate SD upscale mask_blur", "Ultimate SD upscale padding"],
+    "ADetailer": ["ADetailer*", "ADetailer model*", "ADetailer prompt*", "ADetailer negative prompt*",
+                  "ADetailer confidence*", "ADetailer mask blur*", "ADetailer denoising strength*",
+                  "ADetailer inpaint only masked*", "ADetailer inpaint padding*", "ADetailer steps*",
+                  "ADetailer CFG scale*", "ADetailer sampler*", "ADetailer checkpoint*",
+                  "ADetailer VAE*", "ADetailer version"],
+}
+# Impostazione di partenza: l'essenziale per capire e riprodurre una generazione.
+DEFAULT_KEEP_PARAMS = ["Steps", "Sampler", "Schedule type", "CFG scale", "Seed", "Size", "RNG",
+                       "Emphasis", "SGM noise multiplier", "Version",
+                       "Hires upscaler", "Hires steps", "Hires CFG Scale"]
 from PIL import Image, ImageTk, PngImagePlugin, ImageFilter, ImageOps, ImageChops, ImageDraw, ImageFont, ImageColor
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk, colorchooser, simpledialog
@@ -71,6 +111,7 @@ class ImageProcessor:
             self.path_footer_note = os.path.join(self.base_path, "footer_note.txt")
             self.path_copyright = os.path.join(self.base_path, "copyright.txt")
             self.path_model_links = os.path.join(self.base_path, "model_links.json")
+            self.path_keep_params = os.path.join(self.base_path, "params_keep.json")
             self.path_settings = os.path.join(self.base_path, "settings.json")
             self.path_text_presets = os.path.join(self.base_path, "text_presets.json")
             
@@ -121,18 +162,24 @@ class ImageProcessor:
             self.optimize_png = tk.BooleanVar(value=True)
             self.civitai_links = tk.BooleanVar(value=True)  # link di ricerca Civitai per i modelli NON in tabella
             self.custom_links = tk.BooleanVar(value=True)   # link personalizzati per i modelli presenti in tabella
-            self.show_rng = tk.BooleanVar(value=False)      # tiene "RNG:" nei parametri del TXT (utile per riprodurre)
+            # Quali parametri finiscono sotto "Parameters:". RNG compreso: prima aveva
+            # una spunta tutta sua, ora è una voce della lista come le altre.
+            self.param_filter = tk.BooleanVar(value=True)
+            self.keep_params = list(DEFAULT_KEEP_PARAMS)
+            self._param_filter_saved = True
             self.update_check = tk.BooleanVar(value=True)   # controllo aggiornamenti all'avvio
             self._update_info = None                         # dati dell'ultima release trovata
             self._update_banner = None
             self.model_links = []                            # [{"name":..., "url":...}] da model_links.json
             self._links_index = {}                           # nome normalizzato -> url
             self._load_model_links()
+            self._load_keep_params()
+            self.param_filter.set(self._param_filter_saved)
             # opzioni della tab Impostazioni: ricordate tra un avvio e l'altro (settings.json)
             self._settings_vars = {
                 "sdnext_mode": self.sdnext_mode, "keep_metadata": self.keep_metadata,
                 "optimize_png": self.optimize_png, "civitai_links": self.civitai_links,
-                "custom_links": self.custom_links, "show_rng": self.show_rng,
+                "custom_links": self.custom_links,
                 "update_check": self.update_check,
             }
             self._load_settings()
@@ -257,8 +304,15 @@ class ImageProcessor:
                 "u_done": "Aggiornato alla versione {v}.\n\nCopia di sicurezza: {b}\n\nChiudi e riapri il programma per usare la nuova versione.",
                 "u_frozen": "Stai usando la versione compilata (.exe): scarica il nuovo pacchetto dalla pagina delle release.",
                 "u_not_found": "File {f} non trovato accanto al programma: aggiornamento annullato.",
-                "show_rng": "Includi RNG nei parametri",
-                "s_rng_hint": "RNG dice se il rumore è stato generato su CPU o GPU:\nserve a chi vuole riprodurre la tua generazione.",
+                # --- filtro dei parametri ---
+                "p_section": "🧮  PARAMETRI NEL TXT", "p_enable": "Tieni solo i parametri scelti",
+                "p_hint": "Con il filtro acceso finiscono nel txt solo le voci qui sotto,\nnell'ordine in cui le scrive il webui. Quelle assenti dai\nmetadati vengono semplicemente saltate.\n★ Jolly ammessi: \"ADetailer*\" prende anche \"ADetailer model 2nd\".\nPer escludere qualcosa basta non metterlo in lista.",
+                "p_add": "Aggiungi", "p_from_image": "Leggi dall'immagine",
+                "p_add_custom": "Aggiungi scritto a mano", "p_reset": "Ripristina",
+                "p_clear": "Svuota", "p_empty": "Nessun parametro selezionato:\nla sezione Parameters uscirà vuota.",
+                "p_no_image": "Carica prima un'immagine con i metadati.",
+                "p_nothing_new": "Tutti i parametri di questa immagine sono già in lista.",
+                "p_add_found": "Trovati {n} parametri non ancora in lista:\n{l}\n\nAggiungerli?",
                 "s_metadata_hint": "Queste opzioni vengono ricordate al prossimo avvio.\n⚠ Con \"Metadata\" attivo i dati vengono scritti dentro il\nPNG e il file .txt del prompt NON viene creato.",
                 "s_language_hint": "Per aggiungere una lingua: copia un file da Lang/,\nrinominalo (es. fr.json) e traduci i valori.",
                 "s_links": "🔗  LINK AI MODELLI",
@@ -368,8 +422,15 @@ class ImageProcessor:
             "u_done": "Updated to version {v}.\n\nBackup: {b}\n\nClose and reopen the program to use the new version.",
             "u_frozen": "You are running the packaged version (.exe): download the new package from the releases page.",
             "u_not_found": "File {f} not found next to the program: update cancelled.",
-            "show_rng": "Include RNG in parameters",
-            "s_rng_hint": "RNG tells whether noise was generated on CPU or GPU:\nit helps anyone trying to reproduce your generation.",
+            # --- parameter filter ---
+            "p_section": "🧮  PARAMETERS IN THE TXT", "p_enable": "Keep only the chosen parameters",
+            "p_hint": "With the filter on, only the entries below reach the txt,\nin the order the webui writes them. Ones missing from the\nmetadata are simply skipped.\n★ Wildcards allowed: \"ADetailer*\" also catches \"ADetailer model 2nd\".\nTo exclude something, just leave it off the list.",
+            "p_add": "Add", "p_from_image": "Read from image",
+            "p_add_custom": "Add typed entry", "p_reset": "Restore defaults",
+            "p_clear": "Clear all", "p_empty": "No parameter selected:\nthe Parameters section will come out empty.",
+            "p_no_image": "Load an image with metadata first.",
+            "p_nothing_new": "Every parameter in this image is already listed.",
+            "p_add_found": "Found {n} parameters not yet listed:\n{l}\n\nAdd them?",
             "s_metadata_hint": "These options are remembered on next launch.\n⚠ With \"Metadata\" on, data is written inside the PNG\nand the prompt .txt file is NOT created.",
             "s_language_hint": "To add a language: copy a file from Lang/,\nrename it (e.g. fr.json) and translate the values.",
             "s_links": "🔗  MODEL LINKS",
@@ -554,17 +615,21 @@ class ImageProcessor:
                                 if lnk: m_list.append(f"  {lnk}")
                 except: pass
         cp = t_part
-        patterns = [r",?\s*sv_prompt: \".*?\"", r",?\s*sv_prompt: [^,]+", r",?\s*Model hash: [a-f0-9]+",
-                    r",?\s*Model: [^,]+", r",?\s*Hashes: \{.*?\}", r",?\s*Lora hashes: \".*?\"",
-                    # il refiner passa nei Models; "Refiner switch at" resta invece
-                    # fra i parametri, perché serve a riprodurre la generazione
-                    r",?\s*Refiner: [^,]+",
-                    r",?\s*Hires prompt: \".*?\"", r",?\s*Hires negative prompt: \".*?\""]
-        # RNG (rumore generato su CPU o GPU) incide sulla riproducibilità tra setup diversi:
-        # si tiene solo se l'utente lo chiede dalle Impostazioni.
-        if not self.show_rng.get(): patterns.append(r",?\s*RNG: [^,]+")
-        for pat in patterns:
-            cp = re.sub(pat, "", cp, flags=re.I | re.S)
+        if self.param_filter.get():
+            # modalità "tieni solo questi": la lista decide tutto, quindi modello,
+            # hash e refiner spariscono da qui senza bisogno di regole dedicate
+            cp = self._filter_params(cp)
+        else:
+            # nessun filtro: si toglie comunque ciò che è già stampato altrove
+            # o che è pura ripetizione del prompt
+            patterns = [r",?\s*sv_prompt: \".*?\"", r",?\s*sv_prompt: [^,]+", r",?\s*Model hash: [a-f0-9]+",
+                        r",?\s*Model: [^,]+", r",?\s*Hashes: \{.*?\}", r",?\s*Lora hashes: \".*?\"",
+                        # il refiner passa nei Models; "Refiner switch at" resta invece
+                        # fra i parametri, perché serve a riprodurre la generazione
+                        r",?\s*Refiner: [^,]+",
+                        r",?\s*Hires prompt: \".*?\"", r",?\s*Hires negative prompt: \".*?\""]
+            for pat in patterns:
+                cp = re.sub(pat, "", cp, flags=re.I | re.S)
         
         # --- LOGICA FOOTER DINAMICO AVANZATO ---
         footer = self.get_footer_text() if include_footer else ""
@@ -712,6 +777,156 @@ class ImageProcessor:
 
     # --- link personalizzati ai modelli (tab Impostazioni) ---
     MODEL_EXTS = (".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".sft")
+
+    # =========================================================
+    # FILTRO DEI PARAMETRI — decide cosa finisce sotto "Parameters:"
+    # =========================================================
+    @staticmethod
+    def _split_params(text):
+        """Spezza la riga dei parametri in [(chiave, pezzo_intero), …].
+
+        Non si può usare un semplice split(","): alcuni valori contengono virgole
+        al loro interno — Hashes: {…}, Lora hashes: "…", ADetailer prompt: "a, b".
+        Quindi si taglia solo sulle virgole fuori da virgolette e graffe."""
+        pezzi, buf, q, depth = [], "", False, 0
+        for ch in text:
+            if ch == '"': q = not q
+            elif not q and ch in "{[": depth += 1
+            elif not q and ch in "}]": depth = max(0, depth - 1)
+            if ch == "," and not q and depth == 0:
+                pezzi.append(buf); buf = ""
+            else:
+                buf += ch
+        if buf.strip(): pezzi.append(buf)
+        out = []
+        for p in pezzi:
+            s = p.strip()
+            if not s: continue
+            k = s.split(":", 1)[0].strip() if ":" in s else s
+            out.append((k, s))
+        return out
+
+    def _param_kept(self, key):
+        """True se il parametro va tenuto. Confronto senza distinzione fra
+        maiuscole e minuscole, con jolly * e ? come per i link ai modelli."""
+        k = key.strip().lower()
+        for pat in self.keep_params:
+            p = pat.strip().lower()
+            if not p: continue
+            if ("*" in p or "?" in p):
+                if fnmatch.fnmatch(k, p): return True
+            elif k == p:
+                return True
+        return False
+
+    def _filter_params(self, text):
+        """Tiene solo i parametri scelti, nell'ordine in cui li scrive il webui.
+        Quelli assenti dai metadati semplicemente non compaiono: non si inventano
+        righe vuote."""
+        tenuti = [s for k, s in self._split_params(text) if self._param_kept(k)]
+        return ", ".join(tenuti)
+
+    def _param_catalog_values(self):
+        """Voci del menu a tendina, raggruppate e senza quelle già in lista."""
+        attivi = {p.strip().lower() for p in self.keep_params}
+        out = []
+        for gruppo, nomi in PARAM_CATALOG.items():
+            for n in nomi:
+                if n.strip().lower() not in attivi:
+                    out.append(f"{gruppo}  ›  {n}")
+        return out
+
+    def _refresh_param_combo(self):
+        if hasattr(self, "combo_param_add"):
+            self.combo_param_add["values"] = self._param_catalog_values()
+            self.combo_param_add.set("")
+
+    def _refresh_params_list(self):
+        C = self.C
+        if not hasattr(self, "params_list_frame"): return
+        for w in self.params_list_frame.winfo_children(): w.destroy()
+        if not self.keep_params:
+            tk.Label(self.params_list_frame, text=self.tr("p_empty"), bg=C["card"], fg=C["faint"],
+                     font=(self.FONT, 8), justify=tk.LEFT, wraplength=250).pack(anchor="w")
+            return
+        for nome in self.keep_params:
+            row = tk.Frame(self.params_list_frame, bg=C["card_hd"]); row.pack(fill=tk.X, pady=1)
+            jolly = "*" in nome or "?" in nome
+            tk.Label(row, text=nome, bg=C["card_hd"], fg=C["amber"] if jolly else C["text"],
+                     font=(self.MONO, 8), anchor="w").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=8, pady=2)
+            b = tk.Label(row, text="✕", bg=C["card_hd"], fg=C["red_hi"], font=(self.FONT, 9, "bold"),
+                         width=3, cursor="hand2")
+            b.pack(side=tk.RIGHT); b.bind("<Button-1>", lambda ev, n=nome: self.remove_param(n))
+
+    def _params_changed(self):
+        self._save_keep_params(); self._refresh_params_list(); self._refresh_param_combo()
+
+    def _param_filter_changed(self):
+        self._save_keep_params()
+
+    def _add_param(self, nome):
+        nome = (nome or "").strip()
+        if not nome: return False
+        if any(p.strip().lower() == nome.lower() for p in self.keep_params): return False
+        self.keep_params.append(nome); return True
+
+    def add_param_from_combo(self):
+        v = self.combo_param_add.get()
+        if "›" in v: v = v.split("›", 1)[1]
+        if self._add_param(v): self._params_changed()
+
+    def add_param_custom(self):
+        if self._add_param(self.entry_param_custom.get()):
+            self.entry_param_custom.delete(0, tk.END); self._params_changed()
+
+    def add_params_from_image(self):
+        """Legge i parametri realmente presenti nell'immagine caricata e li
+        aggiunge alla lista. Serve per le estensioni che non sono nel catalogo:
+        invece di indovinare il nome esatto, lo si prende dai metadati veri."""
+        raw = (getattr(self, "info_buffer", None) or {}).get("parameters", "")
+        if not raw:
+            messagebox.showinfo(self.tr("p_section"), self.tr("p_no_image")); return
+        t_part = ("Steps: " + raw.split("Steps:")[1]) if "Steps:" in raw else ""
+        trovati = [k for k, _ in self._split_params(t_part) if k]
+        nuovi = [k for k in trovati if not any(p.strip().lower() == k.lower() for p in self.keep_params)]
+        if not nuovi:
+            messagebox.showinfo(self.tr("p_section"), self.tr("p_nothing_new")); return
+        if not messagebox.askyesno(self.tr("p_section"),
+                                   self.tr("p_add_found").format(n=len(nuovi), l="\n• ".join([""] + nuovi))):
+            return
+        for k in nuovi: self._add_param(k)
+        self._params_changed()
+
+    def remove_param(self, nome):
+        self.keep_params = [p for p in self.keep_params if p != nome]
+        self._params_changed()
+
+    def reset_params(self):
+        self.keep_params = list(DEFAULT_KEEP_PARAMS); self._params_changed()
+
+    def clear_params(self):
+        self.keep_params = []; self._params_changed()
+
+    def _load_keep_params(self):
+        self.keep_params = list(DEFAULT_KEEP_PARAMS)
+        try:
+            if os.path.exists(self.path_keep_params):
+                with open(self.path_keep_params, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    if isinstance(data.get("keep"), list):
+                        self.keep_params = [str(x) for x in data["keep"] if str(x).strip()]
+                    self._param_filter_saved = bool(data.get("enabled", True))
+        except Exception:
+            pass
+
+    def _save_keep_params(self):
+        try:
+            with open(self.path_keep_params, "w", encoding="utf-8") as f:
+                json.dump({"enabled": bool(self.param_filter.get()), "keep": self.keep_params},
+                          f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
 
     def _link_key(self, name):
         """Normalizza il nome di un modello/lora per il confronto: minuscolo, senza estensione.
@@ -1319,10 +1534,32 @@ class ImageProcessor:
             selectcolor=C["input"], activebackground=C["card"], activeforeground=C["blue"], font=(self.FONT, 8)).pack(side=tk.LEFT, padx=(0, 14))
         self._mk(tk.Checkbutton, orow, "optimize_png", variable=self.optimize_png, bg=C["card"], fg=C["green"],
             selectcolor=C["input"], activebackground=C["card"], activeforeground=C["green"], font=(self.FONT, 8)).pack(side=tk.LEFT)
-        self._mk(tk.Checkbutton, body, "show_rng", variable=self.show_rng, bg=C["card"], fg=C["amber"],
-            selectcolor=C["input"], activebackground=C["card"], activeforeground=C["amber"], font=(self.FONT, 8)).pack(anchor="w", pady=(6, 0))
-        self._mk(tk.Label, body, "s_rng_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w")
         self._mk(tk.Label, body, "s_metadata_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", pady=(6, 0))
+
+        # --- QUALI PARAMETRI TENERE NEL TXT ---
+        body = self._card(page, title_key="p_section", accent=C["amber"])
+        self._mk(tk.Checkbutton, body, "p_enable", variable=self.param_filter, command=self._param_filter_changed,
+            bg=C["card"], fg=C["amber"], selectcolor=C["input"], activebackground=C["card"],
+            activeforeground=C["amber"], font=(self.FONT, 8, "bold")).pack(anchor="w")
+        self._mk(tk.Label, body, "p_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", pady=(2, 6))
+        # scelta rapida dal catalogo
+        self.combo_param_add = ttk.Combobox(body, state="readonly", font=(self.FONT, 8),
+                                            values=self._param_catalog_values())
+        self.combo_param_add.pack(fill=tk.X, pady=(0, 3))
+        prow = tk.Frame(body, bg=C["card"]); prow.pack(fill=tk.X, pady=(0, 6))
+        self._mbtn(prow, key="p_add", command=self.add_param_from_combo, kind="primary").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
+        self._mbtn(prow, key="p_from_image", command=self.add_params_from_image, kind="normal").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 0))
+        # inserimento manuale, con jolly
+        self.entry_param_custom = tk.Entry(body, bg=C["input"], fg=C["text"], insertbackground=C["text"],
+            relief=tk.FLAT, font=(self.MONO, 8), highlightthickness=1, highlightbackground=C["input_bd"])
+        self.entry_param_custom.pack(fill=tk.X, ipady=3)
+        self.entry_param_custom.bind("<Return>", lambda e: self.add_param_custom())
+        self._mbtn(body, key="p_add_custom", command=self.add_param_custom, kind="normal").pack(fill=tk.X, pady=(3, 6))
+        brow = tk.Frame(body, bg=C["card"]); brow.pack(fill=tk.X, pady=(0, 6))
+        self._mbtn(brow, key="p_reset", command=self.reset_params, kind="normal").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 3))
+        self._mbtn(brow, key="p_clear", command=self.clear_params, kind="normal").pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(3, 0))
+        self.params_list_frame = tk.Frame(body, bg=C["card"]); self.params_list_frame.pack(fill=tk.X)
+        self._refresh_params_list()
 
         # --- AGGIORNAMENTI ---
         body = self._card(page, title_key="u_section", accent=C["amber"])

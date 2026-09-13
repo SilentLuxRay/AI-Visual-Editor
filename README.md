@@ -282,9 +282,40 @@ The interface ships in **English and Italian**. To add another language, copy a 
 | **SD.Next** | parses the `sv_prompt` field used by SD.Next |
 | **Metadata** | keeps the original metadata inside the exported PNG. ⚠️ When this is on, **the `.txt` prompt file is not created** — the data lives in the PNG instead |
 | **Optimize PNG** | maximum compression, smaller files, slower saving |
-| **Include RNG in parameters** | keeps the `RNG:` field in the exported parameters. It tells whether the initial noise was generated on CPU or GPU, which matters a lot to anyone trying to reproduce your generation. Off by default |
 
 These are remembered between sessions.
+
+### Parameters in the txt
+
+Decides which generation parameters reach the `Parameters:` section of the exported text file.
+
+It works as an **inclusion list**: only the entries you list are kept, in the order the webui writes
+them. To exclude something — the noise an upscaler or a detailer leaves behind, say — you simply
+leave it off the list. Anything listed but **absent from the metadata is skipped**, so you never get
+an empty `Hires upscaler:` on an image that had no hires pass.
+
+It ships enabled, with the essentials already selected: `Steps`, `Sampler`, `Schedule type`,
+`CFG scale`, `Seed`, `Size`, `RNG`, `Emphasis`, `SGM noise multiplier`, `Version`,
+`Hires upscaler`, `Hires steps`, `Hires CFG Scale`. Turn the filter off and every parameter comes
+through untouched.
+
+| Control | What it does |
+|---|---|
+| **Dropdown + Add** | a catalogue of ~90 known parameters, grouped by where they come from: base, Forge, hires fix, refiner, inpaint, sigma/schedule, ControlNet, Ultimate SD Upscale, ADetailer |
+| **Read from image** | lists the parameters actually present in the loaded image and offers to add them. The reliable way to catch an extension the catalogue does not know |
+| **Typed entry** | any name, wildcards included |
+| **Restore defaults / Clear all** | back to the shipped list, or empty |
+
+> ★ **Wildcards `*` and `?` are allowed, and you will want them.** Extensions that support several
+> units number them: ADetailer writes `ADetailer model`, then `ADetailer model 2nd`, `3rd`…, and
+> ControlNet numbers its units too. An exact name would catch only the first one, while
+> `ADetailer*` covers the whole family and `Ultimate SD upscale*` removes its five fields in a
+> single entry.
+
+The model, its hash, the LoRAs and the refiner are never affected by this: they have their own
+`Models:` section with their links.
+
+Your selection is kept in `params_keep.json`.
 
 ### Updates
 

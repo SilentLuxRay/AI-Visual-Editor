@@ -131,8 +131,6 @@
   "p_name": "Preset name:",
   "p_none": "No presets saved",
   "p_hint": "Compose a text in the Editor or Collage with the color,\nsize and alignment you want, then press\n\"Save as preset\": you'll find it in the Preset dropdown.",
-  "show_rng": "Include RNG in parameters",
-  "s_rng_hint": "RNG tells whether noise was generated on CPU or GPU:\nit helps anyone trying to reproduce your generation.",
   "u_section": "⬆️  UPDATES",
   "u_check_startup": "Check on startup",
   "u_check_now": "Check now",
@@ -152,5 +150,16 @@
   "c_fit_inside": "Inside the opening",
   "c_fit_fill": "Fill the frame (merge variants)",
   "c_diagonal": "◣  Diagonal",
-  "c_slant": "Slant %"
+  "c_slant": "Slant %",
+  "p_section": "🧮  PARAMETERS IN THE TXT",
+  "p_enable": "Keep only the chosen parameters",
+  "p_add": "Add",
+  "p_from_image": "Read from image",
+  "p_add_custom": "Add typed entry",
+  "p_reset": "Restore defaults",
+  "p_clear": "Clear all",
+  "p_empty": "No parameter selected:\nthe Parameters section will come out empty.",
+  "p_no_image": "Load an image with metadata first.",
+  "p_nothing_new": "Every parameter in this image is already listed.",
+  "p_add_found": "Found {n} parameters not yet listed:\n{l}\n\nAdd them?"
 }

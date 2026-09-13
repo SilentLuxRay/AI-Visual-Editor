@@ -44,6 +44,7 @@ footer_note.txt
 ignore_loras.txt
 ignore_tags.txt
 model_links.json
+params_keep.json
 settings.json
 text_presets.json
 Layouts/
