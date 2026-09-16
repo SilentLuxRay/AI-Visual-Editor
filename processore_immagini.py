@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.28"
-APP_CODENAME = "Parameters"
+APP_VERSION = "2.29"
+APP_CODENAME = "Shaped Frames"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -265,7 +265,7 @@ class ImageProcessor:
             self.STRINGS_IT = {
                 "layers_control": "LAYERS CONTROL", "transform": "TRANSFORM",
                 "delete_permanently": "DELETE PERMANENTLY", "select_account": "SELECT ACCOUNT / SIGNATURE:",
-                "circle_trama_mode": "🔵 CIRCLE TRAMA MODE", "trama_overlay": "TRAMA OVERLAY:",
+                "circle_trama_mode": "🔷 CORNICI SAGOMATE", "trama_overlay": "TRAMA OVERLAY:",
                 "extra_section": "🏷️ EXTRA (sconto / gratis / altro):",
                 "extra_hint": "SHIFT + click = aggiungi elemento (più elementi ok)",
                 "extra_target": "Stampa su:", "extra_on_frame": "Solo cornice", "extra_on_image": "Solo immagine",
@@ -383,7 +383,7 @@ class ImageProcessor:
         return {
             "layers_control": "LAYERS CONTROL", "transform": "TRANSFORM",
             "delete_permanently": "DELETE PERMANENTLY", "select_account": "SELECT ACCOUNT / SIGNATURE:",
-            "circle_trama_mode": "🔵 CIRCLE TEXTURE MODE", "trama_overlay": "TEXTURE OVERLAY:",
+            "circle_trama_mode": "🔷 SHAPED FRAME MODE", "trama_overlay": "TEXTURE OVERLAY:",
             "extra_section": "🏷️ EXTRA (discount / free / other):",
             "extra_hint": "SHIFT + click = add element (multiple allowed)",
             "extra_target": "Print on:", "extra_on_frame": "Frame only", "extra_on_image": "Image only",
@@ -1998,13 +1998,28 @@ class ImageProcessor:
             self.raw_assets["trama"] = None
 
     def change_trama(self, e=None):
-        """Carica la trama selezionata in raw_assets['trama']."""
+        """Carica la trama selezionata e aggiorna subito l'anteprima, come fa
+        change_frame con le cornici normali: senza il ridisegno la nuova trama
+        resterebbe invisibile fino alla prima altra modifica."""
         sel = self.combo_trama.get()
         if sel:
             path = os.path.join(self.folder_mask, sel)
             self.raw_assets["trama"] = Image.open(path).convert("RGBA")
         else:
             self.raw_assets["trama"] = None
+        if self.state["cornice"]["pos"]: self.draw_frame()
+
+    def _frame_export_name(self):
+        """Parte del nome file che distingue l'esportazione della cornice.
+
+        In Circle Texture Mode la cornice è sempre la stessa (es. "cerchio") e a
+        cambiare è la trama sopra: usare il nome della cornice farebbe sovrascrivere
+        ogni esportazione con quella successiva. Il nome della trama contiene già il
+        prefisso della cornice ("cerchio_pellicola-1"), quindi da solo basta."""
+        if self.trama_mode.get():
+            t = self.combo_trama.get()
+            if t: return os.path.splitext(t)[0]
+        return self.current_frame_name
     def on_drop(self, event):
         """Gestisce il drag & drop di un file immagine sulla finestra."""
         path = event.data.strip()
@@ -3439,7 +3454,7 @@ class ImageProcessor:
                             draw_s.text((tx_s+ox, ty_s+oy), label, font=font_s, fill=(0,0,0,220))
                         draw_s.text((tx_s, ty_s), label, font=font_s, fill=(255,255,255,255))
                 # nome file cornice: aggiunge nome account/firma se disponibile
-                out_name = os.path.join(self.output_folder, f"{self.orig_filename}_{self.current_frame_name}{acct}" + (".png" if self.trama_mode.get() else ".jpg"))
+                out_name = os.path.join(self.output_folder, f"{self.orig_filename}_{self._frame_export_name()}{acct}" + (".png" if self.trama_mode.get() else ".jpg"))
                 if self.trama_mode.get(): social.save(out_name, "PNG", optimize=True)
                 else: final_j = Image.new("RGB", social.size, (255,255,255)); final_j.paste(social, mask=social.split()[3]); final_j.save(out_name, "JPEG", quality=95)
             # --- SEED ID: fuori dalla cornice → sull'immagine principale ---

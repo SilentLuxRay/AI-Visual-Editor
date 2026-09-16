@@ -70,8 +70,8 @@ The tool reads its assets from folders next to the script. **They start out empt
 |---|---|
 | `Firme/` | Your signatures, transparent PNG. The file name becomes the account name used in the output file names. |
 | `Cornici/` | Frames / thumbnail borders, transparent PNG. |
-| `Cornici_Mask/` | Frames for *Circle Texture Mode* (see below). |
-| `Maschere/` | Black-and-white masks for *Circle Texture Mode*. |
+| `Cornici_Mask/` | Frames for *Shaped Frame Mode* (see below). |
+| `Maschere/` | Black-and-white masks for *Shaped Frame Mode*. |
 | `Rating/` | Rating badges, transparent PNG. |
 | `Extra/` | Any extra badge — "free", "discount", watermarks… |
 | `Layouts/` | Saved collage layouts (created by the program). |
@@ -108,16 +108,16 @@ The signature name is also appended to the exported file name, which makes it ea
 
 The exported frame file is named `original_name + frame_name`, so you can export the same image with several different frames without overwriting anything.
 
-### Circle Texture Mode — frames of any shape
+### Shaped Frame Mode — frames of any shape
 
 ![Custom frame](screenshots/5_Inserimento_Cornice_Custom.png)
 
-The frame system is built around squares and rectangles. If you want a circle, a hexagon or any other shape, enable **Circle Texture Mode**, which then reads from `Cornici_Mask/` and `Maschere/`:
+The frame system is built around squares and rectangles. If you want a circle, a hexagon or any other shape, enable **Shaped Frame Mode** (*Cornici sagomate* in Italian), which then reads from `Cornici_Mask/` and `Maschere/`:
 
 - In **`Cornici_Mask/`** put the *cutout* — a PNG containing only the border of the shape, e.g. `cerchio.png` — plus the textures/overlays that share its prefix, e.g. `cerchio_Adult-F.png`. The dropdown filters overlays by prefix automatically.
 - In **`Maschere/`** put the black-and-white mask with the same prefix, e.g. `cerchio.png`. **Black is where your image shows through; white is left out.**
 
-The exported frame is a PNG with transparency instead of a JPG.
+The exported frame is a PNG with transparency instead of a JPG. The overlay chooses the preview live, and its full name goes into the file name — `picture_cerchio_film-1_account.png` — so exporting the same picture with several overlays never overwrites anything.
 
 > **The circular mask shipped with this repository is reusable.** The program takes the frame's
 > name, cuts it at the first `_` and looks for a mask with that prefix. So every overlay you name
@@ -194,7 +194,7 @@ Censored exports get `_censored` added to the file name, so your uncensored vers
 | File | Contents |
 |---|---|
 | `name[_censored][_ID]_account.png` | the full image with signature, texts and copyright — **metadata stripped** |
-| `name_frame_account.jpg` | the framed thumbnail (`.png` in Circle Texture Mode) |
+| `name_frame_account.jpg` | the framed thumbnail (`.png` in Shaped Frame Mode) |
 | `name.txt` | the cleaned-up prompt and settings |
 
 ---
