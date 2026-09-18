@@ -28,7 +28,7 @@ It was built to remove the repetitive work of posting AI art on galleries such a
 
 | | |
 |---|---|
-| **Prompt extraction** | Reads the metadata written by Stable Diffusion / Forge / SD.Next and produces a tidy `.txt`: positive prompt, negative prompt, parameters, models — with tags and LoRAs you want to keep private filtered out. |
+| **Prompt extraction** | Reads the metadata written by Stable Diffusion / Forge / SD.Next and produces a tidy `.txt`: positive prompt, negative prompt, parameters, models — with tags and LoRAs you want to keep private filtered out. From ComfyUI images it extracts the workflow `.json`, with the same filters applied. |
 | **Model links** | Adds a link under every model and LoRA. Civitai search by hash, or **your own URL** for models you host elsewhere. |
 | **Signature** | Drops your signature PNG anywhere on the image. |
 | **Frame / thumbnail** | Crops a square of the image into a decorated frame — the "preview" version for galleries. |
@@ -397,6 +397,21 @@ Your footer note goes here.
 Duplicated fields such as `Hires prompt` — which simply repeats the positive prompt — are removed automatically, as are the internal hash blocks.
 
 If you used a **refiner**, it is listed under `Models:` on its own `Refiner:` line, with its hash pulled out of the square brackets the metadata writes it in, and with a link of its own. `Refiner switch at` stays among the parameters, since it describes the generation rather than the model.
+
+### Images made with ComfyUI
+
+ComfyUI does not write a prompt block like Forge does: it embeds its whole **workflow** as JSON. When the tool finds one, it saves it next to your exports as `name.json` instead of the text file — drag that file into ComfyUI and the graph opens as it was. (If the image carries only the API-format block, that one is saved instead.)
+
+Your filters still apply, so the JSON never reveals what the text file would have hidden:
+
+- **`ignore_loras.txt`** — LoRAs are matched by **file name only**, whatever folder they sit in: `Author\NSFW\myLora.safetensors` matches the line `myLora`. A LoRA entry of the *Power Lora Loader* kind (`{"lora": "…", "strength": …}`) is removed entirely; in the base loaders, where the order of the values matters, the path is blanked and its position kept. `<lora:name:weight>` calls written inside prompts are removed too. Detection looks at the shape of the data, not at node names, so loaders the tool has never heard of are covered as well.
+- **`ignore_tags.txt`** — every prompt text in the workflow is cleaned with the same rule as the text file. A line is rewritten only when something is actually removed, so your line breaks, spacing and commas otherwise stay exactly as you wrote them.
+
+Everything else — links, groups, settings, checkpoint, sampler values — is left untouched. The exported image is still stripped of all metadata unless you enabled **Metadata** in Settings, in which case no separate JSON is written, just as with the text file.
+
+If an image carries both a workflow and a Forge-style `parameters` block (some save nodes add one), you get both files. In the Collage, a ComfyUI image gets its own numbered JSON, and the combined text file points to it.
+
+> Someone who reopens a JSON with a hidden LoRA and runs it will have to pick a LoRA or bypass that node in the base loaders, since the path is blank. That is the price of hiding it in a workflow that stays loadable.
 
 ---
 

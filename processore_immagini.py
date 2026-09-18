@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.29"
-APP_CODENAME = "Shaped Frames"
+APP_VERSION = "2.30"
+APP_CODENAME = "ComfyUI"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -553,6 +553,130 @@ class ImageProcessor:
             with open(self.path_lang_config, "w", encoding="utf-8") as f: f.write(lang_code)
         except Exception:
             pass
+
+    @staticmethod
+    def _comfy_workflow(info):
+        """Il JSON di ComfyUI contenuto nell'immagine, oppure None.
+
+        ComfyUI non scrive "parameters" come A1111/Forge, ma due blocchi JSON:
+        "workflow" (il grafo completo: trascinando il file in ComfyUI si riapre così
+        com'era) e "prompt" (formato API, più povero). Si preferisce "workflow".
+        La struttura si controlla davvero, perché altri programmi usano la chiave
+        "prompt" per del semplice testo."""
+        for key in ("workflow", "prompt"):
+            raw = info.get(key)
+            if not raw: continue
+            try:
+                data = json.loads(raw) if isinstance(raw, (str, bytes)) else raw
+            except Exception:
+                continue
+            if not isinstance(data, dict) or not data: continue
+            if key == "workflow" and isinstance(data.get("nodes"), list):
+                return data
+            if key == "prompt" and any(isinstance(v, dict) and "class_type" in v for v in data.values()):
+                return data
+        return None
+
+    def _write_comfy_json(self, data, path):
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(self._sanitize_comfy(data), f, ensure_ascii=False, indent=2)
+
+    # --- filtri ignore_loras.txt / ignore_tags.txt applicati al workflow di ComfyUI ---
+    def _read_blacklists(self):
+        """(lora_bloccate, tag_bloccati). Le LoRA si normalizzano togliendo
+        l'estensione, così in ignore_loras.txt vale sia "nome" sia "nome.safetensors"."""
+        def leggi(p):
+            if not os.path.exists(p): return []
+            with open(p, "r", encoding="utf-8") as f:
+                return [l.strip().lower() for l in f if l.strip() and not l.strip().startswith("#")]
+        loras = set()
+        for l in leggi(self.path_ignore_loras):
+            for ext in self.MODEL_EXTS:
+                if l.endswith(ext): l = l[:-len(ext)]; break
+            loras.add(l)
+        return loras, leggi(self.path_ignore_tags)
+
+    @staticmethod
+    def _lora_name_of(value):
+        """Solo il nome del file, senza cartelle né estensione:
+        "Autore\\NSFW\\Lolity_v2.safetensors" -> "lolity_v2"."""
+        base = re.split(r"[\\/]", str(value).strip())[-1]
+        for ext in ImageProcessor.MODEL_EXTS:
+            if base.lower().endswith(ext): return base[:-len(ext)].lower()
+        return base.lower()
+
+    @staticmethod
+    def _is_model_path(s):
+        return isinstance(s, str) and s.strip().lower().endswith(ImageProcessor.MODEL_EXTS)
+
+    def _clean_comfy_text(self, text, tags, loras):
+        """Toglie da un prompt i tag vietati e i richiami <lora:…> bloccati.
+        Al contrario del txt, qui il testo si riapre in ComfyUI: quindi si lavora
+        riga per riga e si riscrive una riga SOLO se le si toglie qualcosa, così
+        a capo, spaziature e virgole originali restano come le avevi scritte."""
+        righe = []
+        for orig in text.split("\n"):
+            riga = orig
+            if loras:
+                riga = re.sub(r"<lora:([^:>]+)(?::[^>]*)?>",
+                              lambda mm: "" if self._lora_name_of(mm.group(1)) in loras else mm.group(0), riga, flags=re.I)
+            parti = riga.split(",")
+            tenute = [p for p in parti if not (tags and p.strip() and any(w in p.strip().lower() for w in tags))]
+            if riga != orig or len(tenute) != len(parti):
+                # qualcosa è stato tolto: niente virgole doppie rimaste al suo posto
+                riga = ",".join(p for p in tenute if p.strip()).strip().strip(",").strip()
+            righe.append(riga)
+        return "\n".join(righe)
+
+    def _sanitize_comfy(self, data):
+        """Copia del workflow con ignore_loras.txt e ignore_tags.txt applicati.
+
+        Si guarda la forma dei valori, non il nome del nodo, così funziona anche
+        con loader che il programma non conosce:
+        • un blocco {"lora": "percorso…", …} (Power Lora Loader di rgthree e simili)
+          con una LoRA bloccata viene tolto per intero, forza compresa;
+        • un percorso di LoRA scritto come stringa (LoraLoader, LoraLoaderModelOnly)
+          viene svuotato: la posizione resta, perché lì conta l'ordine dei valori;
+        • un testo che sembra un prompt viene ripulito dai tag vietati."""
+        loras, tags = self._read_blacklists()
+        if not loras and not tags: return data
+        data = json.loads(json.dumps(data))           # copia: l'originale non si tocca
+
+        def sistema(v, contesto):
+            """(nuovo_valore, da_togliere)"""
+            if isinstance(v, dict) and "lora" in v and v.get("lora") and self._lora_name_of(v["lora"]) in loras:
+                return None, True
+            if isinstance(v, str):
+                if self._is_model_path(v):
+                    if "lora" in contesto and self._lora_name_of(v) in loras: return "", False
+                    return v, False
+                if "," in v or "\n" in v or "textencode" in contesto or "prompt" in contesto:
+                    return self._clean_comfy_text(v, tags, loras), False
+            return v, False
+
+        def sistema_contenitore(c, contesto):
+            if isinstance(c, list):
+                nuovo = []
+                for v in c:
+                    nv, via = sistema(v, contesto)
+                    if not via: nuovo.append(nv)
+                return nuovo
+            if isinstance(c, dict):
+                for k in list(c):
+                    nv, via = sistema(c[k], contesto + " " + str(k).lower())
+                    if via: del c[k]
+                    else: c[k] = nv
+            return c
+
+        if isinstance(data.get("nodes"), list):            # formato "workflow"
+            for nd in data["nodes"]:
+                if isinstance(nd, dict) and "widgets_values" in nd:
+                    nd["widgets_values"] = sistema_contenitore(nd["widgets_values"], str(nd.get("type", "")).lower())
+        else:                                              # formato API ("prompt")
+            for nd in data.values():
+                if isinstance(nd, dict) and isinstance(nd.get("inputs"), dict):
+                    sistema_contenitore(nd["inputs"], str(nd.get("class_type", "")).lower())
+        return data
 
     def parse_metadata(self, info, include_footer=True):
         raw = info.get("parameters", "")
@@ -3303,6 +3427,14 @@ class ImageProcessor:
             # --- testo: concatenazione semplice dei prompt + footer una volta sola ---
             blocks = []
             for i, item in enumerate(self.collage_images, 1):
+                comfy = self._comfy_workflow(item["info"])
+                if comfy and not item["info"].get("parameters"):
+                    # immagine di ComfyUI: il workflow va in un json a parte, numerato
+                    jname = f"collage_{ts}_{i}.json"
+                    self._write_comfy_json(comfy, os.path.join(self.output_folder, jname))
+                    saved.append(jname)
+                    blocks.append(f"#{i}\nComfyUI workflow: {jname}")
+                    continue
                 txt = self.parse_metadata(item["info"], include_footer=False)
                 blocks.append(f"#{i}\n{txt}")
             combined = "\n\n".join(blocks)
@@ -3322,7 +3454,15 @@ class ImageProcessor:
             if png_info:
                 for k, v in self.info_buffer.items(): png_info.add_text(k, str(v))
             else:
-                with open(os.path.join(self.output_folder, f"{self.orig_filename}.txt"), "w", encoding="utf-8") as f: f.write(self.parse_metadata(self.info_buffer))
+                # Immagine di ComfyUI: si estrae il workflow così com'è, in un .json.
+                # Il txt si scrive lo stesso se c'è anche un blocco "parameters" in stile
+                # A1111 (alcuni nodi di salvataggio lo aggiungono), altrimenti no: sarebbe
+                # solo un "No metadata found." accanto al json.
+                comfy = self._comfy_workflow(self.info_buffer)
+                if comfy:
+                    self._write_comfy_json(comfy, os.path.join(self.output_folder, f"{self.orig_filename}.json"))
+                if self.info_buffer.get("parameters") or not comfy:
+                    with open(os.path.join(self.output_folder, f"{self.orig_filename}.txt"), "w", encoding="utf-8") as f: f.write(self.parse_metadata(self.info_buffer))
             ow, oh = self.orig_img.size; out_png = self.orig_img.copy()
             if self.state["firma"]["pos"] and self.state["firma"]["visible"] and self.raw_assets["firma"]:
                 p, s = self.state["firma"]["pos"], self.state["firma"]["scale"]; px, py = int(p[0]*ow), int(p[1]*oh); sw = int(ow*s)
