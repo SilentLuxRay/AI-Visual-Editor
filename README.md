@@ -140,7 +140,7 @@ The exported frame is a PNG with transparency instead of a JPG. The overlay choo
 
 **SHIFT + left-click** adds an extra badge. You can add **as many as you like** — each one is moved, resized, rotated, hidden or deleted independently, and they all appear as separate rows in *Layers Control*.
 
-**Print on** decides where they all end up: `Frame only` or `Image only`.
+**Print on** is chosen *per element*: `Frame` or `Image`. It applies to whichever extra is selected, so a badge can sit inside the thumbnail while another one goes on the full picture. With nothing selected it becomes the default for the next element you add — which is usually the quickest way to work. Each row in *Layers Control* shows where that element is headed (🔲 frame, 🖼 image).
 
 *Replace selected* swaps the artwork of the element you have selected, keeping its position and size.
 

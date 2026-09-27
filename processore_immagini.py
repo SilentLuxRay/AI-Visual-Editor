@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.30"
-APP_CODENAME = "ComfyUI"
+APP_VERSION = "2.31"
+APP_CODENAME = "Extra Targets"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -268,7 +268,8 @@ class ImageProcessor:
                 "circle_trama_mode": "🔷 CORNICI SAGOMATE", "trama_overlay": "TRAMA OVERLAY:",
                 "extra_section": "🏷️ EXTRA (sconto / gratis / altro):",
                 "extra_hint": "SHIFT + click = aggiungi elemento (più elementi ok)",
-                "extra_target": "Stampa su:", "extra_on_frame": "Solo cornice", "extra_on_image": "Solo immagine",
+                "extra_target": "Stampa su:", "extra_on_frame": "Cornice", "extra_on_image": "Immagine",
+                "extra_target_hint": "Vale per l'elemento selezionato: ogni extra può andare\ndove vuoi. Se non ne hai selezionato nessuno, la scelta\nfa da predefinita per il prossimo che aggiungi.",
                 "sdnext_mode": "SD.Next", "keep_metadata": "Metadata", "optimize_png": "Ottimizza PNG",
                 "civitai_links": "Link Civitai",
                 "extra_replace": "⇄  Sostituisci selezionato",
@@ -386,7 +387,8 @@ class ImageProcessor:
             "circle_trama_mode": "🔷 SHAPED FRAME MODE", "trama_overlay": "TEXTURE OVERLAY:",
             "extra_section": "🏷️ EXTRA (discount / free / other):",
             "extra_hint": "SHIFT + click = add element (multiple allowed)",
-            "extra_target": "Print on:", "extra_on_frame": "Frame only", "extra_on_image": "Image only",
+            "extra_target": "Print on:", "extra_on_frame": "Frame", "extra_on_image": "Image",
+            "extra_target_hint": "Applies to the selected element: each extra can go\nwherever you like. With nothing selected, the choice\nbecomes the default for the next one you add.",
             "sdnext_mode": "SD.Next", "keep_metadata": "Metadata", "optimize_png": "Optimize PNG",
             "civitai_links": "Civitai links",
             "extra_replace": "⇄  Replace selected",
@@ -1483,8 +1485,9 @@ class ImageProcessor:
         self._mbtn(body, key="extra_replace", command=self.replace_selected_extra, kind="normal").pack(fill=tk.X, pady=(3, 0))
         extra_tgt_row = tk.Frame(body, bg=C["card"]); extra_tgt_row.pack(fill=tk.X, pady=(2, 0))
         self._mk(tk.Label, extra_tgt_row, "extra_target", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(side=tk.LEFT)
-        self._mk(tk.Radiobutton, extra_tgt_row, "extra_on_frame", variable=self.extra_target, value="cornice", bg=C["card"], fg=C["text"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["text"], font=(self.FONT, 8)).pack(side=tk.LEFT, padx=4)
-        self._mk(tk.Radiobutton, extra_tgt_row, "extra_on_image", variable=self.extra_target, value="immagine", bg=C["card"], fg=C["teal"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["teal"], font=(self.FONT, 8)).pack(side=tk.LEFT)
+        self._mk(tk.Radiobutton, extra_tgt_row, "extra_on_frame", variable=self.extra_target, value="cornice", command=self._apply_extra_target, bg=C["card"], fg=C["text"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["text"], font=(self.FONT, 8)).pack(side=tk.LEFT, padx=4)
+        self._mk(tk.Radiobutton, extra_tgt_row, "extra_on_image", variable=self.extra_target, value="immagine", command=self._apply_extra_target, bg=C["card"], fg=C["teal"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["teal"], font=(self.FONT, 8)).pack(side=tk.LEFT)
+        self._mk(tk.Label, body, "extra_target_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w")
 
         # ---------- CARD: I/O (opzioni + load/hide) ----------
         # ---------- CARD: TESTI ----------
@@ -1850,7 +1853,9 @@ class ImageProcessor:
             _row(t, self.tr(f"layer_{t}"), bool(self.state[t]["pos"]), self.state[t]["visible"])
         for i, ex in enumerate(self.extras, 1):
             nm = ex["name"] if len(ex["name"]) <= 12 else ex["name"][:11] + "…"
-            _row(self._extra_tag(ex), f"{self.tr('layer_extra')} {i} · {nm}", bool(ex["pos"]), ex["visible"],
+            # segno della destinazione, così si legge a colpo d'occhio senza selezionarlo
+            dove = "🖼" if ex.get("target", "cornice") == "immagine" else "🔲"
+            _row(self._extra_tag(ex), f"{self.tr('layer_extra')} {i} · {nm}  {dove}", bool(ex["pos"]), ex["visible"],
                  on_del=lambda uid=ex["uid"]: self.delete_extra(uid))
         for i, t in enumerate(self.texts, 1):
             nm = (t.get("text") or "").replace("\n", " ")
@@ -1872,6 +1877,7 @@ class ImageProcessor:
         if it: self.highlight(it[0])
         self.update_layer_panel()
         self._sync_text_controls()   # se è un TESTO, la sua card deve mostrarne i valori
+        self._sync_extra_controls()  # se è un EXTRA, il selettore mostra la SUA destinazione
     # ---------- TESTI (editor): comandi ----------
     def add_text_layer(self):
         t = self.new_text_layer()
@@ -1941,6 +1947,24 @@ class ImageProcessor:
         self.extras.remove(ex)
         self.canvas.delete("selector"); self.draw_all_layers(); self.update_layer_panel()
     # ---------- EXTRA multipli: helper ----------
+    def _sync_extra_controls(self):
+        """Porta il selettore 'Stampa su' sulla destinazione dell'EXTRA selezionato.
+        Se la selezione non è un extra il valore resta lì, e farà da predefinito
+        per il prossimo elemento aggiunto."""
+        ex = self._sel_extra()
+        if ex is None: return
+        self._extra_ui_lock = True
+        try: self.extra_target.set(ex.get("target", "cornice"))
+        finally: self._extra_ui_lock = False
+
+    def _apply_extra_target(self):
+        """Il selettore è stato mosso: la nuova destinazione va sull'elemento scelto."""
+        if getattr(self, "_extra_ui_lock", False): return
+        ex = self._sel_extra()
+        if ex is not None:
+            ex["target"] = self.extra_target.get()
+            self.update_layer_panel()
+
     def _extra_tag(self, ex): return f"extra:{ex['uid']}"
     def _sel_extra(self):
         """Dict dell'EXTRA selezionato, o None se la selezione non è un extra."""
@@ -2271,10 +2295,13 @@ class ImageProcessor:
         scale = self.state["cornice"]["size"] * 0.3 if self.state["cornice"]["pos"] else 0.15
         ex = {"uid": self._extra_uid, "name": getattr(self, "current_extra_name", "extra"),
               "img": self.raw_assets["extra"], "pos": (cx/self.img_w, cy/self.img_h),
-              "scale": scale, "visible": True, "rotation": 0}
+              "scale": scale, "visible": True, "rotation": 0,
+              # destinazione PROPRIA dell'elemento: il selettore della card fa da
+              # valore di partenza, come il menu decide l'immagine del prossimo extra
+              "target": self.extra_target.get()}
         self.extras.append(ex)
         self.selected_layer = self._extra_tag(ex)
-        self.draw_extra(ex); self.update_layer_panel()
+        self.draw_extra(ex); self.update_layer_panel(); self._sync_extra_controls()
     def delete_selected(self):
         tx = self._sel_text()
         if tx is not None: self.delete_text(tx["uid"]); return
@@ -3470,16 +3497,16 @@ class ImageProcessor:
                 firma_rotation = self.state["firma"].get("rotation", 0)
                 if firma_rotation: asset = asset.rotate(firma_rotation, expand=True, resample=Image.Resampling.BICUBIC)
                 out_png.paste(asset, (px, py), asset)
-            # --- EXTRA sull'immagine intera (modalità "solo immagine") — tutti gli elementi ---
-            if self.extra_target.get() == "immagine":
-                for ex in self.extras:
-                    if not (ex["pos"] and ex["visible"] and ex.get("img")): continue
-                    ep, es = ex["pos"], ex["scale"]
-                    epx, epy = int(ep[0]*ow), int(ep[1]*oh); e_src = ex["img"]; ew = max(1, int(ow*es))
-                    e_asset = e_src.resize((ew, max(1, int(e_src.height*(ew/e_src.width)))), Image.Resampling.LANCZOS)
-                    e_rot = ex.get("rotation", 0)
-                    if e_rot: e_asset = e_asset.rotate(e_rot, expand=True, resample=Image.Resampling.BICUBIC)
-                    out_png.paste(e_asset, (epx, epy), e_asset)
+            # --- EXTRA sull'immagine intera: solo quelli con destinazione "immagine" ---
+            for ex in self.extras:
+                if ex.get("target", "cornice") != "immagine": continue
+                if not (ex["pos"] and ex["visible"] and ex.get("img")): continue
+                ep, es = ex["pos"], ex["scale"]
+                epx, epy = int(ep[0]*ow), int(ep[1]*oh); e_src = ex["img"]; ew = max(1, int(ow*es))
+                e_asset = e_src.resize((ew, max(1, int(e_src.height*(ew/e_src.width)))), Image.Resampling.LANCZOS)
+                e_rot = ex.get("rotation", 0)
+                if e_rot: e_asset = e_asset.rotate(e_rot, expand=True, resample=Image.Resampling.BICUBIC)
+                out_png.paste(e_asset, (epx, epy), e_asset)
             # --- TESTI con destinazione "immagine": sul PNG principale, a piena risoluzione ---
             for t in self.texts:
                 if not t.get("visible", True) or t.get("target") != "immagine": continue
@@ -3518,8 +3545,10 @@ class ImageProcessor:
                 cp, cs = self.state["cornice"]["pos"], self.state["cornice"]["size"]; cx1, cy1 = int(cp[0]*ow), int(cp[1]*oh); c_side = int(cs*ow); crop = self.orig_img.crop((cx1, cy1, cx1 + c_side, cy1 + c_side)).resize(self.raw_assets["cornice"].size, Image.Resampling.LANCZOS)
                 # --- EXTRA (sconto/gratis/badge): incollato SUL RITAGLIO, prima di sovrapporre la cornice ---
                 def _paste_extra_on(target_img):
-                    if self.extra_target.get() != "cornice": return   # in "solo immagine" gli extra sono già sul PNG principale
                     for ex in self.extras:
+                        # ogni elemento ha la sua destinazione: qui entrano solo quelli
+                        # della cornice, gli altri sono già sul PNG principale
+                        if ex.get("target", "cornice") != "cornice": continue
                         if not (ex["pos"] and ex["visible"] and ex.get("img")): continue
                         exp, exs = ex["pos"], ex["scale"]; exr, eyr = (exp[0]*ow-cx1)/c_side, (exp[1]*oh-cy1)/c_side
                         if 0<=exr<=1 and 0<=eyr<=1:

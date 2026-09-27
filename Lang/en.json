@@ -48,8 +48,8 @@
   "msg_load_image_first": "Load an image first.",
   "civitai_links": "Civitai links",
   "extra_target": "Print on:",
-  "extra_on_frame": "Frame only",
-  "extra_on_image": "Image only",
+  "extra_on_frame": "Frame",
+  "extra_on_image": "Image",
   "extra_replace": "⇄  Replace selected",
   "c_title": "🖼  COLLAGE",
   "c_images": "IMAGES  (in order)",
@@ -161,5 +161,6 @@
   "p_empty": "No parameter selected:\nthe Parameters section will come out empty.",
   "p_no_image": "Load an image with metadata first.",
   "p_nothing_new": "Every parameter in this image is already listed.",
-  "p_add_found": "Found {n} parameters not yet listed:\n{l}\n\nAdd them?"
+  "p_add_found": "Found {n} parameters not yet listed:\n{l}\n\nAdd them?",
+  "extra_target_hint": "Applies to the selected element: each extra can go\nwherever you like. With nothing selected, the choice\nbecomes the default for the next one you add."
 }

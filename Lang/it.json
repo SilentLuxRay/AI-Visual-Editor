@@ -48,8 +48,8 @@
   "msg_load_image_first": "Carica prima un'immagine.",
   "civitai_links": "Link Civitai",
   "extra_target": "Stampa su:",
-  "extra_on_frame": "Solo cornice",
-  "extra_on_image": "Solo immagine",
+  "extra_on_frame": "Cornice",
+  "extra_on_image": "Immagine",
   "extra_replace": "⇄  Sostituisci selezionato",
   "c_title": "🖼  COLLAGE",
   "c_images": "IMMAGINI  (in ordine)",
@@ -161,5 +161,6 @@
   "p_empty": "Nessun parametro selezionato:\nla sezione Parameters uscirà vuota.",
   "p_no_image": "Carica prima un'immagine con i metadati.",
   "p_nothing_new": "Tutti i parametri di questa immagine sono già in lista.",
-  "p_add_found": "Trovati {n} parametri non ancora in lista:\n{l}\n\nAggiungerli?"
+  "p_add_found": "Trovati {n} parametri non ancora in lista:\n{l}\n\nAggiungerli?",
+  "extra_target_hint": "Vale per l'elemento selezionato: ogni extra può andare\ndove vuoi. Se non ne hai selezionato nessuno, la scelta\nfa da predefinita per il prossimo che aggiungi."
 }
