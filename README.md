@@ -242,6 +242,8 @@ The image is **cropped** by the shape, never stretched.
 
 Each image has its own **Scale %** control below its name: use the slider or enter a value from **10% to 300%**. The reset button returns it to **100%**, the original cover fit. Scaling preserves the image's proportions and works in both automatic grids and free layouts, with an immediate preview. Any space exposed by reducing the image uses the selected gap colour. Drag to adjust the crop (Ctrl+drag in free layouts); the saved collage uses the same scale as the preview.
 
+Choose **Grid** to arrange images in a table, with independently configurable columns and rows (for example, 2 × 2). Images fill cells from left to right, then top to bottom; empty cells retain the gap colour. Extra rows are added automatically if needed to include every image. A grid can also be used as the starting arrangement for a free layout.
+
 **Uniform borders, automatically.** Do not try to leave equal gaps by hand: make the panels **touch each other**, and the tool creates the white space by shrinking each shape by half the gap. Two touching panels therefore end up exactly one gap apart — everywhere. **Snap corners and edges** makes them click together.
 
 Layouts you like can be saved as **presets** and reapplied to any other set of images.

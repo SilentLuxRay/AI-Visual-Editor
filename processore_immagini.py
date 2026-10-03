@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.32"
-APP_CODENAME = "Collage Image Scale"
+APP_VERSION = "2.33"
+APP_CODENAME = "Collage Grid"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -232,6 +232,8 @@ class ImageProcessor:
             # --- modalità layout: "cols" (colonne automatiche) | "free" (editor libero) ---
             self.collage_mode = tk.StringVar(value="cols")
             self.collage_dir = tk.StringVar(value="cols")   # griglia automatica: "cols" (verticale) | "rows" (orizzontale)
+            self.collage_grid_cols = tk.IntVar(value=2)
+            self.collage_grid_rows = tk.IntVar(value=2)
             # celle libere: una per immagine — x,y = CENTRO normalizzato (0-1), w,h normalizzati, rot in gradi
             self.free_cells = []
             self.free_sel = None              # indice cella selezionata
@@ -286,6 +288,8 @@ class ImageProcessor:
                 "p_save": "⭐  Salva come preset", "p_name": "Nome del preset:", "p_none": "Nessun preset salvato",
                 "p_hint": "Componi un testo nell'Editor o nel Collage con colore,\ndimensione e allineamento che vuoi, poi premi\n\"Salva come preset\": lo ritrovi nella tendina Preset.",
                 "c_dir": "Direzione:", "c_dir_v": "Colonne", "c_dir_h": "Righe", "c_rows": "righe",
+                "c_dir_grid": "Griglia", "c_grid_cols": "Colonne:", "c_grid_rows": "Righe:",
+                "c_grid_hint": "Ordine: da sinistra a destra, poi dall'alto in basso.\nSe necessario vengono aggiunte righe automaticamente.",
                 "c_diagonal": "◣  Diagonale", "c_slant": "Pendenza % (100 = spigolo a spigolo)",
                 # --- TAB IMPOSTAZIONI ---
                 "s_tab": "  ⚙  Impostazioni  ", "s_title": "⚙  IMPOSTAZIONI",
@@ -406,6 +410,8 @@ class ImageProcessor:
             "p_save": "⭐  Save as preset", "p_name": "Preset name:", "p_none": "No presets saved",
             "p_hint": "Compose a text in the Editor or Collage with the color,\nsize and alignment you want, then press\n\"Save as preset\": you'll find it in the Preset dropdown.",
             "c_dir": "Direction:", "c_dir_v": "Columns", "c_dir_h": "Rows", "c_rows": "rows",
+            "c_dir_grid": "Grid", "c_grid_cols": "Columns:", "c_grid_rows": "Rows:",
+            "c_grid_hint": "Order: left to right, then top to bottom.\nExtra rows are added automatically when needed.",
             "c_diagonal": "◣  Diagonal", "c_slant": "Slant % (100 = corner to corner)",
             # --- SETTINGS TAB ---
             "s_tab": "  ⚙  Settings  ", "s_title": "⚙  SETTINGS",
@@ -2507,6 +2513,14 @@ class ImageProcessor:
             bg=C["card"], fg=C["text"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["text"], font=(self.FONT, 8)).pack(side=tk.LEFT, padx=3)
         self._mk(tk.Radiobutton, drow, "c_dir_h", variable=self.collage_dir, value="rows", command=self._collage_dir_changed,
             bg=C["card"], fg=C["text"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["text"], font=(self.FONT, 8)).pack(side=tk.LEFT)
+        self._mk(tk.Radiobutton, mrow, "c_dir_grid", variable=self.collage_dir, value="grid", command=self._collage_dir_changed,
+            bg=C["card"], fg=C["text"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["text"], font=(self.FONT, 8)).pack(anchor="w", padx=18)
+        grow = tk.Frame(mrow, bg=C["card"]); grow.pack(fill=tk.X, padx=18, pady=3)
+        for key, var in (("c_grid_cols", self.collage_grid_cols), ("c_grid_rows", self.collage_grid_rows)):
+            self._mk(tk.Label, grow, key, bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(side=tk.LEFT)
+            self._spin(grow, from_=1, to=100, increment=1, textvariable=var, width=4).pack(side=tk.LEFT, padx=4)
+            var.trace_add("write", lambda *a: self._collage_grid_changed())
+        self._mk(tk.Label, mrow, "c_grid_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", padx=18, pady=3)
         self._mk(tk.Radiobutton, mrow, "c_mode_free", variable=self.collage_mode, value="free", command=self._collage_mode_changed,
             bg=C["card"], fg=C["amber"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["amber"], font=(self.FONT, 8)).pack(anchor="w")
         # controlli visibili solo in modalità libera
@@ -2625,12 +2639,33 @@ class ImageProcessor:
             scale_row.pack(fill=tk.X, pady=(0, 4))
             self._mk(tk.Label, scale_row, "c_image_scale", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(side=tk.LEFT)
             value = tk.DoubleVar(value=round(item.get("zoom", 1.0) * 100, 1))
+            typed = tk.StringVar(value=f"{value.get():g}")
             tk.Scale(scale_row, from_=10, to=300, resolution=1, orient=tk.HORIZONTAL,
-                     variable=value, command=lambda v, image=item: self._collage_image_scale(image, v),
+                     variable=value,
                      bg=C["card"], fg=C["text"], troughcolor=C["input"], highlightthickness=0,
                      length=140).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
-            self._spin(scale_row, from_=10, to=300, increment=5, textvariable=value, width=5).pack(side=tk.LEFT)
-            value.trace_add("write", lambda *a, image=item, var=value: self._collage_image_scale(image, var))
+            entry = self._spin(scale_row, from_=10, to=300, increment=5, textvariable=typed, width=5)
+            entry.pack(side=tk.LEFT)
+            def slide_changed(*a, image=item, var=value, field=typed):
+                field.set(f"{var.get():g}")
+                self._collage_image_scale(image, var)
+            def edit_scale(event=None, final=False, image=item, var=value, field=typed):
+                try:
+                    number = float(field.get().replace(",", "."))
+                    if not math.isfinite(number): raise ValueError
+                except ValueError:
+                    if final: field.set(f"{image.get('zoom', 1.0) * 100:g}")
+                    return
+                if not final and not 10 <= number <= 300: return
+                number = min(300, max(10, number))
+                if var.get() != number: var.set(number)
+                if final: field.set(f"{var.get():g}")
+                self._collage_image_scale(image, number)
+            entry.config(command=edit_scale)
+            entry.bind("<KeyRelease>", edit_scale)
+            entry.bind("<Return>", lambda e, apply=edit_scale: apply(e, final=True))
+            entry.bind("<FocusOut>", lambda e, apply=edit_scale: apply(e, final=True))
+            value.trace_add("write", slide_changed)
             self._iconbtn(scale_row, "↺", lambda var=value: var.set(100)).pack(side=tk.LEFT, padx=3)
 
     def _collage_image_scale(self, item, value):
@@ -2788,6 +2823,18 @@ class ImageProcessor:
         E come bordo esterno. La direzione dipende da collage_dir: 'cols' = colonne affiancate
         (verticali), 'rows' = righe impilate (orizzontali)."""
         if n <= 0: return []
+        if self.collage_dir.get() == "grid":
+            cols, rows = self._collage_grid_shape(n)
+            cw = (W - (cols + 1) * g) / cols
+            ch = (H - (rows + 1) * g) / rows
+            if cw < 1 or ch < 1: return []
+            cells = []
+            for i in range(n):
+                row, col = divmod(i, cols)
+                x = g + col * (cw + g); y = g + row * (ch + g)
+                x0, y0 = round(x), round(y)
+                cells.append((x0, y0, max(1, round(x + cw) - x0), max(1, round(y + ch) - y0)))
+            return cells
         horizontal = self.collage_dir.get() == "rows"
         cells = []
         if horizontal:
@@ -2978,6 +3025,14 @@ class ImageProcessor:
         x0 = half / W; x1 = 1.0 - half / W
         y0 = half / H; y1 = 1.0 - half / H
         out = []
+        if self.collage_dir.get() == "grid":
+            cols, rows = self._collage_grid_shape(n)
+            cw = (x1 - x0) / cols; ch = (y1 - y0) / rows
+            for i in range(n):
+                row, col = divmod(i, cols)
+                ax = x0 + col * cw; ay = y0 + row * ch
+                out.append({"pts": [[ax, ay], [ax + cw, ay], [ax + cw, ay + ch], [ax, ay + ch]]})
+            return out
         if self.collage_dir.get() == "rows":
             rowh = (y1 - y0) / n
             for i in range(n):
@@ -3015,6 +3070,21 @@ class ImageProcessor:
         for v in (0.0, half_y, 1.0 - half_y, 1.0):
             if abs(v - ny) < dby: dby = abs(v - ny); by = v
         return bx, by
+
+    def _collage_grid_shape(self, n):
+        try:
+            cols = min(100, max(1, self.collage_grid_cols.get()))
+            rows = min(100, max(1, self.collage_grid_rows.get()))
+        except tk.TclError:
+            cols, rows = 2, 2
+        return cols, max(rows, (n + cols - 1) // cols)
+
+    def _collage_grid_changed(self):
+        try:
+            self.collage_grid_cols.get(); self.collage_grid_rows.get()
+        except tk.TclError:
+            return
+        if self.collage_dir.get() == "grid": self._collage_dir_changed()
 
     def _collage_dir_changed(self):
         """Cambio direzione della griglia automatica. In modalità libera rigenera le celle,
@@ -3272,6 +3342,9 @@ class ImageProcessor:
         out_w, out_h = (frame.size if frame is not None else (W, H))
         unit = self.tr("c_rows") if self.collage_dir.get() == "rows" else self.tr("c_columns")
         layout_txt = f"{n} {self.tr('c_panels_free')}" if free else f"{n} {unit}   •   {self.tr('c_gap')} {g}px"
+        if not free and self.collage_dir.get() == "grid":
+            cols, rows = self._collage_grid_shape(n)
+            layout_txt = f"{self.tr('c_dir_grid')} {cols} × {rows}   •   {self.tr('c_gap')} {g}px"
         readout = f"{out_w} × {out_h} px   •   {layout_txt}" + (f"   •   {self.tr('c_with_frame')}" if frame is not None else "")
         cv.create_rectangle(8, 8, 8 + 9 * len(readout), 30, fill=self.C["card"], outline=self.C["line"])
         cv.create_text(14, 19, anchor="w", text=readout, fill=self.C["text"], font=(self.FONT, 9, "bold"))
