@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.31"
-APP_CODENAME = "Extra Targets"
+APP_VERSION = "2.32"
+APP_CODENAME = "Collage Image Scale"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -322,6 +322,7 @@ class ImageProcessor:
                 "s_no_links": "Nessun link personalizzato", "s_saved_in": "Salvato in model_links.json",
                 # --- TAB COLLAGE ---
                 "c_title": "🖼  COLLAGE", "c_images": "IMMAGINI  (in ordine)",
+                "c_image_scale": "Scala %",
                 "c_add_images": "＋  Aggiungi immagini", "c_no_images": "Nessuna immagine caricata",
                 "c_format": "FORMATO FILE", "c_width": "Larghezza", "c_height": "Altezza",
                 "c_gutter": "Spazio / bordo px", "c_gutter_color": "Colore spazi", "c_choose": "Scegli…",
@@ -441,6 +442,7 @@ class ImageProcessor:
             "s_no_links": "No custom links", "s_saved_in": "Saved in model_links.json",
             # --- COLLAGE TAB ---
             "c_title": "🖼  COLLAGE", "c_images": "IMAGES  (in order)",
+            "c_image_scale": "Scale %",
             "c_add_images": "＋  Add images", "c_no_images": "No images loaded",
             "c_format": "FILE FORMAT", "c_width": "Width", "c_height": "Height",
             "c_gutter": "Gap / border px", "c_gutter_color": "Gap color", "c_choose": "Choose…",
@@ -2619,6 +2621,28 @@ class ImageProcessor:
             self._iconbtn(row, "↑", lambda idx=i: self.collage_move(idx, -1)).pack(side=tk.LEFT, padx=1)
             self._iconbtn(row, "↓", lambda idx=i: self.collage_move(idx, 1)).pack(side=tk.LEFT, padx=1)
             self._iconbtn(row, "✕", lambda idx=i: self.collage_remove(idx)).pack(side=tk.LEFT, padx=(1, 4))
+            scale_row = tk.Frame(self.collage_list_frame, bg=C["card"])
+            scale_row.pack(fill=tk.X, pady=(0, 4))
+            self._mk(tk.Label, scale_row, "c_image_scale", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(side=tk.LEFT)
+            value = tk.DoubleVar(value=round(item.get("zoom", 1.0) * 100, 1))
+            tk.Scale(scale_row, from_=10, to=300, resolution=1, orient=tk.HORIZONTAL,
+                     variable=value, command=lambda v, image=item: self._collage_image_scale(image, v),
+                     bg=C["card"], fg=C["text"], troughcolor=C["input"], highlightthickness=0,
+                     length=140).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+            self._spin(scale_row, from_=10, to=300, increment=5, textvariable=value, width=5).pack(side=tk.LEFT)
+            value.trace_add("write", lambda *a, image=item, var=value: self._collage_image_scale(image, var))
+            self._iconbtn(scale_row, "↺", lambda var=value: var.set(100)).pack(side=tk.LEFT, padx=3)
+
+    def _collage_image_scale(self, item, value):
+        try:
+            zoom = float(value.get() if hasattr(value, "get") else value) / 100.0
+            if not math.isfinite(zoom): return
+            zoom = min(3.0, max(0.1, zoom))
+        except (ValueError, tk.TclError):
+            return
+        if item.get("zoom", 1.0) == zoom: return
+        item["zoom"] = zoom
+        self._render_collage_preview()
 
     def collage_add_images(self):
         paths = filedialog.askopenfilenames(filetypes=[("Immagini", "*.png *.jpg *.jpeg *.webp *.bmp"), ("Tutti i file", "*.*")])
@@ -2788,24 +2812,26 @@ class ImageProcessor:
                 x += cw + g
         return cells
 
-    def _fit_cover(self, img, cw, ch, offx, offy):
+    def _fit_cover(self, img, cw, ch, offx, offy, zoom=1.0):
         """Ritaglio 'cover': riempie (cw, ch) mantenendo le proporzioni, con pan (offx, offy) in 0..1."""
         iw, ih = img.size
         if iw <= 0 or ih <= 0: return Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
-        scale = max(cw / iw, ch / ih)
-        sw = max(cw, int(round(iw * scale))); sh = max(ch, int(round(ih * scale)))
+        scale = max(cw / iw, ch / ih) * zoom
+        sw = max(1, int(round(iw * scale))); sh = max(1, int(round(ih * scale)))
         scaled = img.resize((sw, sh), Image.Resampling.LANCZOS)
         max_x = sw - cw; max_y = sh - ch
         cx = int(round(max_x * offx)); cy = int(round(max_y * offy))
-        return scaled.crop((cx, cy, cx + cw, cy + ch))
+        piece = scaled.crop((cx, cy, cx + cw, cy + ch))
+        background = Image.new("RGBA", (cw, ch), self.collage_gutter_color)
+        return Image.alpha_composite(background, piece.convert("RGBA"))
 
     # ---------- modalità libera: helper geometrici ----------
-    def _cover_overflow(self, img, cw, ch):
+    def _cover_overflow(self, img, cw, ch, zoom=1.0):
         """Dimensione dell'immagine scalata in 'cover' su (cw,ch) — serve per il pan del ritaglio."""
         iw, ih = img.size
         if iw <= 0 or ih <= 0: return cw, ch
-        sc = max(cw / iw, ch / ih)
-        return max(cw, int(round(iw * sc))), max(ch, int(round(ih * sc)))
+        sc = max(cw / iw, ch / ih) * zoom
+        return max(1, int(round(iw * sc))), max(1, int(round(ih * sc)))
 
     def _rot_xy(self, lx, ly, deg):
         """Ruota un offset locale di 'deg' gradi (positivo = orario, coordinate schermo y-giù)."""
@@ -3058,14 +3084,14 @@ class ImageProcessor:
                 x0, y0 = int(math.floor(min(xs))), int(math.floor(min(ys)))
                 x1, y1 = int(math.ceil(max(xs))), int(math.ceil(max(ys)))
                 bw, bh = max(1, x1 - x0), max(1, y1 - y0)
-                piece = self._fit_cover(item["img"], bw, bh, item["offx"], item["offy"])
+                piece = self._fit_cover(item["img"], bw, bh, item["offx"], item["offy"], item.get("zoom", 1.0))
                 # maschera poligonale in supersampling: bordi diagonali lisci invece che a scaletta
                 ss = 4 if bw * bh <= 4_000_000 else 2
                 mk = Image.new("L", (bw * ss, bh * ss), 0)
                 ImageDraw.Draw(mk).polygon([((px - x0) * ss, (py - y0) * ss) for px, py in pts], fill=255)
                 mask = mk.resize((bw, bh), Image.Resampling.LANCZOS)
                 img.paste(piece.convert("RGB"), (x0, y0), mask)
-                sw, sh = self._cover_overflow(item["img"], bw, bh)
+                sw, sh = self._cover_overflow(item["img"], bw, bh, item.get("zoom", 1.0))
                 # per l'interazione servono gli angoli ORIGINALI (quelli che l'utente trascina),
                 # mentre 'draw' è la forma effettivamente disegnata (ristretta dall'inset)
                 rects.append({"pts": raw_pts, "draw": pts, "ovx": sw - bw, "ovy": sh - bh})
@@ -3074,9 +3100,9 @@ class ImageProcessor:
                 item = self.collage_images[i]
                 px, py = int(x * s), int(y * s)
                 cw = max(1, int(cw0 * s)); ch = max(1, int(ch0 * s))
-                piece = self._fit_cover(item["img"], cw, ch, item["offx"], item["offy"])
+                piece = self._fit_cover(item["img"], cw, ch, item["offx"], item["offy"], item.get("zoom", 1.0))
                 img.paste(piece.convert("RGB"), (px, py))
-                sw, sh = self._cover_overflow(item["img"], cw, ch)
+                sw, sh = self._cover_overflow(item["img"], cw, ch, item.get("zoom", 1.0))
                 rects.append({"pts": [(px, py), (px + cw, py), (px + cw, py + ch), (px, py + ch)],
                               "ovx": sw - cw, "ovy": sh - ch})
         self._draw_cell_outlines(img, rects, s)
@@ -3333,8 +3359,8 @@ class ImageProcessor:
         act = self._free_action
         if act is None or act == "pan":
             # sposta il ritaglio dentro il riquadro
-            if c["ovx"] > 0: item["offx"] = min(1.0, max(0.0, item["offx"] - dx / c["ovx"]))
-            if c["ovy"] > 0: item["offy"] = min(1.0, max(0.0, item["offy"] - dy / c["ovy"]))
+            if c["ovx"] != 0: item["offx"] = min(1.0, max(0.0, item["offx"] - dx / c["ovx"]))
+            if c["ovy"] != 0: item["offy"] = min(1.0, max(0.0, item["offy"] - dy / c["ovy"]))
         elif act == "move":
             cell = self.free_cells[i]; ndx = dx / self._free_px_x; ndy = dy / self._free_px_y
             for p in cell["pts"]: p[0] += ndx; p[1] += ndy
