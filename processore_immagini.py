@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.33"
-APP_CODENAME = "Collage Grid"
+APP_VERSION = "2.34"
+APP_CODENAME = "Text Settings"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -118,13 +118,7 @@ class ImageProcessor:
             for f in [self.output_folder, self.folder_cornici, self.folder_rating, self.folder_mask, self.folder_firme, self.folder_maschere, self.folder_extra, self.folder_lang, self.folder_layouts]:
                 os.makedirs(f, exist_ok=True)
 
-            for path in [self.path_ignore_loras, self.path_ignore_tags, self.path_footer_note]:
-                if not os.path.exists(path):
-                    with open(path, "w", encoding="utf-8") as f:
-                        if "tags" in path: f.write("# Write tags to exclude here\n")
-            if not os.path.exists(self.path_copyright):
-                with open(self.path_copyright, "w", encoding="utf-8") as f:
-                    f.write("© {NAME} {YEAR} — All rights reserved")
+            # I vecchi file di testo vengono importati nelle impostazioni.
             
             self.current_file_path = ""
             self.orig_img = None
@@ -217,6 +211,8 @@ class ImageProcessor:
             # firma sul collage (riusa self.raw_assets["firma"])
             self.collage_sig_enabled = tk.BooleanVar(value=False)
             self.collage_sig_scale = tk.IntVar(value=15)     # % della larghezza del collage
+            self.signature_opacity = tk.IntVar(value=100)
+            self.collage_sig_opacity = tk.IntVar(value=100)
             self.collage_sig_pos = (0.72, 0.90)              # angolo alto-sinistra normalizzato (0-1)
             self._collage_sig_rect = None
             self._collage_sig_drag = False
@@ -338,6 +334,11 @@ class ImageProcessor:
                 "c_hint_cols": "💡 Trascina un'immagine nell'anteprima per\nspostare il ritaglio.",
                 "c_signature": "FIRMA", "c_sig_apply": "Applica firma", "c_sig_size": "Dim %",
                 "c_hint_sig": "💡 Trascina la firma nell'anteprima per spostarla.",
+                "signature_opacity": "Opacità firma %",
+                "s_text_config": "TESTI E FILTRI", "s_ignore_tags": "Tag esclusi (uno per riga)",
+                "s_ignore_loras": "LoRA esclusi (uno per riga)", "s_footer_text": "Nota finale / Footer",
+                "s_copyright_text": "Testo copyright",
+                "s_text_config_hint": "Salvataggio automatico nelle impostazioni, valido per Editor e Collage.\nFiltri: una voce per riga; # introduce un commento.\nSegnaposto: {NAME}, {YEAR}, {DATE}; nel footer anche {HOURS}.\nI vecchi file vengono importati solo se manca il corrispondente testo nelle impostazioni.",
                 "c_frame": "CORNICE", "c_frame_apply": "Applica cornice",
                 "c_frame_fit": "Come applicarla:",
                 "c_fit_inside": "Dentro l'apertura", "c_fit_fill": "Riempi la cornice (unisci varianti)",
@@ -460,6 +461,11 @@ class ImageProcessor:
             "c_hint_cols": "💡 Drag an image in the preview to\nmove the crop.",
             "c_signature": "SIGNATURE", "c_sig_apply": "Apply signature", "c_sig_size": "Size %",
             "c_hint_sig": "💡 Drag the signature in the preview to move it.",
+            "signature_opacity": "Signature opacity %",
+            "s_text_config": "TEXT AND FILTERS", "s_ignore_tags": "Excluded tags (one per line)",
+            "s_ignore_loras": "Excluded LoRAs (one per line)", "s_footer_text": "Footer note",
+            "s_copyright_text": "Copyright text",
+            "s_text_config_hint": "Automatically saved in settings, shared by Editor and Collage.\nFilters: one entry per line; # starts a comment.\nPlaceholders: {NAME}, {YEAR}, {DATE}; also {HOURS} in the footer.\nLegacy files are imported only when the corresponding text is absent from settings.",
             "c_frame": "FRAME", "c_frame_apply": "Apply frame",
             "c_frame_fit": "How to apply it:",
             "c_fit_inside": "Inside the opening", "c_fit_fill": "Fill the frame (merge variants)",
@@ -596,9 +602,7 @@ class ImageProcessor:
         """(lora_bloccate, tag_bloccati). Le LoRA si normalizzano togliendo
         l'estensione, così in ignore_loras.txt vale sia "nome" sia "nome.safetensors"."""
         def leggi(p):
-            if not os.path.exists(p): return []
-            with open(p, "r", encoding="utf-8") as f:
-                return [l.strip().lower() for l in f if l.strip() and not l.strip().startswith("#")]
+            return [l.strip().lower() for l in self._config_text(p).splitlines() if l.strip() and not l.strip().startswith("#")]
         loras = set()
         for l in leggi(self.path_ignore_loras):
             for ext in self.MODEL_EXTS:
@@ -692,10 +696,7 @@ class ImageProcessor:
         raw = info.get("parameters", "")
         if not raw: return "No metadata found."
 
-        lora_blacklist = []
-        if os.path.exists(self.path_ignore_loras):
-            with open(self.path_ignore_loras, "r", encoding="utf-8") as f:
-                lora_blacklist = [l.strip().lower() for l in f.readlines() if l.strip()]
+        lora_blacklist = [l.strip().lower() for l in self._config_text(self.path_ignore_loras).splitlines() if l.strip() and not l.strip().startswith("#")]
 
         if "Steps:" in raw:
             parts = raw.split("Steps:"); p_part, t_part = parts[0].strip(), "Steps: " + parts[1].strip()
@@ -1200,9 +1201,19 @@ class ImageProcessor:
 
     # --- opzioni persistenti (settings.json) ---
     def _load_settings(self):
+        self._text_paths = {"ignore_tags": self.path_ignore_tags, "ignore_loras": self.path_ignore_loras,
+                            "footer_note": self.path_footer_note, "copyright": self.path_copyright}
+        self.config_texts = {}
+        for key, path in self._text_paths.items():
+            try:
+                with open(path, "r", encoding="utf-8-sig") as f: self.config_texts[key] = f.read()
+            except OSError:
+                self.config_texts[key] = ""
         try:
             if not os.path.exists(self.path_settings): return
             with open(self.path_settings, "r", encoding="utf-8") as f: data = json.load(f)
+            for key, value in data.get("texts", {}).items():
+                if key in self.config_texts and isinstance(value, str): self.config_texts[key] = value
             for k, v in self._settings_vars.items():
                 if k in data:
                     try: v.set(bool(data[k]))
@@ -1213,6 +1224,7 @@ class ImageProcessor:
     def _save_settings(self):
         try:
             out = {}
+            out["texts"] = self.config_texts.copy()
             for k, v in self._settings_vars.items():
                 try: out[k] = bool(v.get())
                 except Exception: pass
@@ -1220,6 +1232,11 @@ class ImageProcessor:
                 json.dump(out, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
+
+    def _config_text(self, path):
+        for key, source in self._text_paths.items():
+            if source == path: return self.config_texts.get(key, "")
+        return ""
 
     def _load_model_links(self):
         """Carica model_links.json. Accetta sia la lista [{name,url}] sia un dict {nome: url}."""
@@ -1271,9 +1288,8 @@ class ImageProcessor:
     def get_footer_text(self):
         """Footer dinamico da footer_note.txt con segnaposto {NAME} {YEAR} {DATE} {HOURS}."""
         footer = ""
-        if os.path.exists(self.path_footer_note):
-            with open(self.path_footer_note, "r", encoding="utf-8") as f:
-                footer = f.read().strip()
+        footer = self._config_text(self.path_footer_note).strip()
+        if footer:
             now = datetime.now()
             footer = footer.replace("{NAME}", self.current_signature_name)
             footer = footer.replace("{YEAR}", now.strftime("%Y"))
@@ -1284,8 +1300,7 @@ class ImageProcessor:
     def get_copyright_text(self):
         """Legge copyright.txt e sostituisce i segnaposto {NAME}, {DATE}, {YEAR}."""
         try:
-            with open(self.path_copyright, "r", encoding="utf-8") as f:
-                text = f.read().strip()
+            text = self._config_text(self.path_copyright).strip()
             now = __import__("datetime").datetime.now()
             text = text.replace("{NAME}", self.current_signature_name)
             text = text.replace("{DATE}", now.strftime("%d/%m/%Y"))
@@ -1480,6 +1495,7 @@ class ImageProcessor:
         # ---------- CARD: ACCOUNT / CORNICE ----------
         body = self._card(self.sidebar, "select_account", accent=C["blue"])
         self.combo_firme = self._combo(body, width=10); self.combo_firme.pack(fill=tk.X, pady=(0, 4)); self.combo_firme.bind("<<ComboboxSelected>>", self.change_signature)
+        self._signature_opacity_control(body, self.signature_opacity, collage=False)
         self._mk(tk.Checkbutton, body, "circle_trama_mode", variable=self.trama_mode, command=self.toggle_trama_mode_ui, bg=C["card"], fg=C["blue"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["blue"], font=(self.FONT, 9, "bold")).pack(anchor="w", pady=(2, 4))
         self.combo_cornici = self._combo(body, width=10); self.combo_cornici.pack(fill=tk.X, pady=3); self.combo_cornici.bind("<<ComboboxSelected>>", self.change_frame)
         # Selettore trama — visibile solo in Circle Trama Mode (stesso parent di combo_cornici per il pack after=)
@@ -1672,6 +1688,28 @@ class ImageProcessor:
         self._mk(tk.Label, body, "s_metadata_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", pady=(6, 0))
 
         # --- QUALI PARAMETRI TENERE NEL TXT ---
+        body = self._card(page, title_key="s_text_config", accent=C["teal"])
+        self._mk(tk.Label, body, "s_text_config_hint", bg=C["card"], fg=C["muted"],
+                 font=(self.FONT, 9), justify=tk.LEFT).pack(anchor="w", pady=(0, 8))
+        for key, label in (("ignore_tags", "s_ignore_tags"), ("ignore_loras", "s_ignore_loras"),
+                           ("footer_note", "s_footer_text"), ("copyright", "s_copyright_text")):
+            self._mk(tk.Label, body, label, bg=C["card"], fg=C["text"], font=(self.FONT, 9, "bold")).pack(anchor="w", pady=(6, 3))
+            row = tk.Frame(body, bg=C["card"]); row.pack(fill=tk.X)
+            field = tk.Text(row, height=4, wrap=tk.WORD, bg=C["input"], fg=C["text"],
+                            insertbackground=C["text"], font=(self.FONT, 10), undo=True)
+            scroll = tk.Scrollbar(row, command=field.yview)
+            field.config(yscrollcommand=scroll.set)
+            scroll.pack(side=tk.RIGHT, fill=tk.Y); field.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            field.insert("1.0", self.config_texts[key]); field.edit_modified(False)
+            def text_changed(event, name=key, editor=field):
+                if not editor.edit_modified(): return
+                self.config_texts[name] = editor.get("1.0", "end-1c")
+                editor.edit_modified(False)
+                self._save_settings()
+                if name == "copyright" and self.orig_img: self.draw_all_layers()
+            field.bind("<<Modified>>", text_changed)
+        self._save_settings()
+
         body = self._card(page, title_key="p_section", accent=C["amber"])
         self._mk(tk.Checkbutton, body, "p_enable", variable=self.param_filter, command=self._param_filter_changed,
             bg=C["card"], fg=C["amber"], selectcolor=C["input"], activebackground=C["card"],
@@ -1812,9 +1850,7 @@ class ImageProcessor:
 
     def clean_prompt_tags(self, text):
         if not text: return ""
-        blacklist = []
-        if os.path.exists(self.path_ignore_tags):
-            with open(self.path_ignore_tags, "r", encoding="utf-8") as f: blacklist = [l.strip().lower() for l in f.readlines() if l.strip() and not l.startswith("#")]
+        blacklist = [l.strip().lower() for l in self._config_text(self.path_ignore_tags).splitlines() if l.strip() and not l.strip().startswith("#")]
         t_list = [t.strip() for t in text.replace('\n',',').split(',') if t.strip()]
         filtered = []
         for t in t_list:
@@ -2041,6 +2077,7 @@ class ImageProcessor:
         if not raw or not self.state[t]["pos"]: return
         s = int(self.img_w * self.state[t]["scale"]); h = int(raw.height*(s/raw.width))
         resized = raw.resize((s, h), Image.Resampling.LANCZOS)
+        if t == "firma": resized = self._signature_alpha(resized, self.signature_opacity.get())
         rotation = self.state[t].get("rotation", 0)
         if rotation: resized = resized.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
         itk = ImageTk.PhotoImage(resized)
@@ -2557,6 +2594,7 @@ class ImageProcessor:
         self._mk(tk.Checkbutton, r, "c_sig_apply", variable=self.collage_sig_enabled, command=self._render_collage_preview, bg=C["card"], fg=C["text"], selectcolor=C["input"], activebackground=C["card"], activeforeground=C["text"], font=(self.FONT, 8)).pack(side=tk.LEFT)
         self._mk(tk.Label, r, "c_sig_size", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(side=tk.LEFT, padx=(8, 2))
         self._spin(r, from_=2, to=80, increment=1, textvariable=self.collage_sig_scale, width=4, command=self._render_collage_preview).pack(side=tk.LEFT)
+        self._signature_opacity_control(body, self.collage_sig_opacity, collage=True)
         self._mk(tk.Label, body, "c_hint_sig", bg=C["card"], fg=C["faint"], font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", pady=(6, 0))
 
         body = self._card(side, title_key="c_frame", accent=C["teal"])
@@ -3254,6 +3292,24 @@ class ImageProcessor:
             rects.append((t, r))
         return rects
 
+    @staticmethod
+    def _signature_alpha(image, opacity):
+        image = image.convert("RGBA").copy()
+        factor = max(0, min(100, opacity)) / 100.0
+        image.putalpha(image.getchannel("A").point(lambda a: round(a * factor)))
+        return image
+
+    def _signature_opacity_control(self, parent, variable, collage=False):
+        self._mk(tk.Label, parent, "signature_opacity", bg=self.C["card"], fg=self.C["muted"],
+                 font=(self.FONT, 8)).pack(anchor="w", pady=(4, 0))
+        tk.Scale(parent, from_=0, to=100, resolution=1, orient=tk.HORIZONTAL, variable=variable,
+                 bg=self.C["card"], fg=self.C["text"], troughcolor=self.C["input"],
+                 highlightthickness=0).pack(fill=tk.X)
+        def changed(*args):
+            if collage: self._render_collage_preview()
+            else: self.draw_element("firma")
+        variable.trace_add("write", changed)
+
     def _paste_collage_signature(self, img):
         """Incolla la firma sul collage; ritorna il rect (x0,y0,x1,y1) o None."""
         firma = self.raw_assets.get("firma")
@@ -3262,6 +3318,7 @@ class ImageProcessor:
         sw = max(1, int((self.collage_sig_scale.get() / 100.0) * w))
         sh = max(1, int(firma.height * (sw / firma.width)))
         sig = firma.resize((sw, sh), Image.Resampling.LANCZOS)
+        sig = self._signature_alpha(sig, self.collage_sig_opacity.get())
         sx = min(max(0, int(self.collage_sig_pos[0] * w)), max(0, w - sw))
         sy = min(max(0, int(self.collage_sig_pos[1] * h)), max(0, h - sh))
         img.paste(sig, (sx, sy), sig)
@@ -3593,6 +3650,7 @@ class ImageProcessor:
             if self.state["firma"]["pos"] and self.state["firma"]["visible"] and self.raw_assets["firma"]:
                 p, s = self.state["firma"]["pos"], self.state["firma"]["scale"]; px, py = int(p[0]*ow), int(p[1]*oh); sw = int(ow*s)
                 asset = self.raw_assets["firma"].resize((sw, int(self.raw_assets["firma"].height*(sw/self.raw_assets["firma"].width))), Image.Resampling.LANCZOS)
+                asset = self._signature_alpha(asset, self.signature_opacity.get())
                 firma_rotation = self.state["firma"].get("rotation", 0)
                 if firma_rotation: asset = asset.rotate(firma_rotation, expand=True, resample=Image.Resampling.BICUBIC)
                 out_png.paste(asset, (px, py), asset)

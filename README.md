@@ -98,6 +98,8 @@ Both buttons stay pinned at the top of the panel, and **SAVE ALL EXPORTS** stays
 
 Pick a signature from the dropdown, then **right-click** on the canvas to place it. Drag it to move it, and use the **+ − ⟲ ⟳** buttons in *Layers Control* to resize and rotate.
 
+The **Signature opacity %** slider adjusts transparency from 0% (invisible) to 100% (the original signature). Editor and Collage have independent controls; previews and saved images use the same opacity.
+
 The signature name is also appended to the exported file name, which makes it easy to keep versions for different accounts side by side.
 
 ### Frame (thumbnail)
@@ -177,7 +179,7 @@ Censored exports get `_censored` added to the file name, so your uncensored vers
 
 **Seed ID** reads the seed from the image metadata and prints it as a movable label. Drag it inside the frame and it is printed on the frame; leave it outside and it goes on the full image. If the image has no seed, a manual ID field appears and that ID is also added to the file name.
 
-**Copyright** prints a line at the bottom left, with adjustable size and opacity. The text comes from `copyright.txt` and understands three placeholders:
+**Copyright** prints a line at the bottom left, with adjustable size and opacity. Edit its text in **Settings → Text and filters**; it understands three placeholders:
 
 | Placeholder | Becomes |
 |---|---|
@@ -361,9 +363,11 @@ Every text preset you saved from the Editor or the Collage is listed here, with 
 
 ---
 
-## Configuration text files
+## Text and filters in Settings
 
-These plain-text files live next to the program and shape the exported `.txt`.
+Edit excluded tags, excluded LoRAs, footer notes and copyright directly in **Settings → Text and filters**. Changes save automatically in `settings.json` and apply to Editor, Collage and ComfyUI filtering. **All four fields start empty on a fresh installation.** Use one entry per line for filters; lines starting with `#` are comments.
+
+When upgrading, the legacy files below are imported only if the corresponding text has not yet been saved in Settings. An intentionally empty saved field remains empty. Once imported and saved, edit the fields in the app; subsequent changes to the old files are not used. Personal text files and settings are not included in the repository.
 
 | File | What it does |
 |---|---|
