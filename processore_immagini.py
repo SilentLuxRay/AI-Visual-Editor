@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.34"
-APP_CODENAME = "Text Settings"
+APP_VERSION = "2.35"
+APP_CODENAME = "Collage Fit"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -198,6 +198,8 @@ class ImageProcessor:
             self.collage_images = []          # list di dict: {path, name, img(RGBA), info, offx, offy}
             self.collage_w = tk.IntVar(value=800)
             self.collage_h = tk.IntVar(value=1000)
+            self.collage_auto_height = tk.BooleanVar(value=False)
+            self.collage_contain = tk.BooleanVar(value=False)
             self.collage_gutter = tk.IntVar(value=20)   # spazio tra colonne + bordo esterno
             self.collage_gutter_color = "#ffffff"
             self.collage_outline = tk.IntVar(value=0)      # spessore contorno vignetta (0 = nessuno)
@@ -335,6 +337,9 @@ class ImageProcessor:
                 "c_signature": "FIRMA", "c_sig_apply": "Applica firma", "c_sig_size": "Dim %",
                 "c_hint_sig": "💡 Trascina la firma nell'anteprima per spostarla.",
                 "signature_opacity": "Opacità firma %",
+                "c_auto_height": "Calcola altezza dalla prima immagine",
+                "c_contain": "Mostra immagine intera (senza ritaglio)",
+                "c_auto_hint": "Altezza automatica solo per colonne, righe e griglia.\nUsa le proporzioni della prima foto e la larghezza scelta.\nPer foto diverse usa immagine intera; scala 100% per vederla tutta.",
                 "s_text_config": "TESTI E FILTRI", "s_ignore_tags": "Tag esclusi (uno per riga)",
                 "s_ignore_loras": "LoRA esclusi (uno per riga)", "s_footer_text": "Nota finale / Footer",
                 "s_copyright_text": "Testo copyright",
@@ -462,6 +467,9 @@ class ImageProcessor:
             "c_signature": "SIGNATURE", "c_sig_apply": "Apply signature", "c_sig_size": "Size %",
             "c_hint_sig": "💡 Drag the signature in the preview to move it.",
             "signature_opacity": "Signature opacity %",
+            "c_auto_height": "Calculate height from the first image",
+            "c_contain": "Show entire image (no cropping)",
+            "c_auto_hint": "Automatic height for columns, rows and grid only.\nUses the first photo's ratio and the chosen document width.\nFor mixed ratios use entire image; set scale to 100% to show it all.",
             "s_text_config": "TEXT AND FILTERS", "s_ignore_tags": "Excluded tags (one per line)",
             "s_ignore_loras": "Excluded LoRAs (one per line)", "s_footer_text": "Footer note",
             "s_copyright_text": "Copyright text",
@@ -2528,6 +2536,12 @@ class ImageProcessor:
         self._spin(r, from_=100, to=12000, increment=50, textvariable=self.collage_w, width=6, command=self._render_collage_preview).pack(side=tk.LEFT, padx=(4, 10))
         self._mk(tk.Label, r, "c_height", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(side=tk.LEFT)
         self._spin(r, from_=100, to=12000, increment=50, textvariable=self.collage_h, width=6, command=self._render_collage_preview).pack(side=tk.LEFT, padx=4)
+        for key, variable in (("c_auto_height", self.collage_auto_height), ("c_contain", self.collage_contain)):
+            self._mk(tk.Checkbutton, body, key, variable=variable, command=self._render_collage_preview,
+                bg=C["card"], fg=C["text"], selectcolor=C["input"], activebackground=C["card"],
+                activeforeground=C["text"], font=(self.FONT, 8)).pack(anchor="w")
+        self._mk(tk.Label, body, "c_auto_hint", bg=C["card"], fg=C["faint"],
+                 font=(self.FONT, 8), justify=tk.LEFT).pack(anchor="w", pady=(3, 5))
         r2 = tk.Frame(body, bg=C["card"]); r2.pack(fill=tk.X, pady=2)
         self._mk(tk.Label, r2, "c_gutter", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).pack(side=tk.LEFT)
         self._spin(r2, from_=0, to=500, increment=2, textvariable=self.collage_gutter, width=5, command=self._render_collage_preview).pack(side=tk.LEFT, padx=6)
@@ -2856,6 +2870,20 @@ class ImageProcessor:
             self.collage_swatch.config(bg=c[1])
             self._render_collage_preview()
 
+    def _collage_dimensions(self):
+        W = max(1, self.collage_w.get()); H = max(1, self.collage_h.get())
+        g = max(0, self.collage_gutter.get())
+        n = len(self.collage_images)
+        if self.collage_auto_height.get() and n and self.collage_mode.get() != "free":
+            direction = self.collage_dir.get()
+            cols, rows = self._collage_grid_shape(n) if direction == "grid" else ((1, n) if direction == "rows" else (n, 1))
+            iw, ih = self.collage_images[0]["img"].size
+            cell_width = (W - (cols + 1) * g) / cols
+            if cell_width > 0:
+                H = max(1, round(rows * cell_width * ih / iw + (rows + 1) * g))
+                if self.collage_h.get() != H: self.collage_h.set(H)
+        return W, H, g
+
     def _compute_collage_layout(self, W, H, n, g):
         """Celle (x, y, cw, ch) in coordinate del file finale, con spazio 'g' tra le celle
         E come bordo esterno. La direzione dipende da collage_dir: 'cols' = colonne affiancate
@@ -2901,7 +2929,8 @@ class ImageProcessor:
         """Ritaglio 'cover': riempie (cw, ch) mantenendo le proporzioni, con pan (offx, offy) in 0..1."""
         iw, ih = img.size
         if iw <= 0 or ih <= 0: return Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
-        scale = max(cw / iw, ch / ih) * zoom
+        fit = min if self.collage_contain.get() else max
+        scale = fit(cw / iw, ch / ih) * zoom
         sw = max(1, int(round(iw * scale))); sh = max(1, int(round(ih * scale)))
         scaled = img.resize((sw, sh), Image.Resampling.LANCZOS)
         max_x = sw - cw; max_y = sh - ch
@@ -2915,7 +2944,8 @@ class ImageProcessor:
         """Dimensione dell'immagine scalata in 'cover' su (cw,ch) — serve per il pan del ritaglio."""
         iw, ih = img.size
         if iw <= 0 or ih <= 0: return cw, ch
-        sc = max(cw / iw, ch / ih) * zoom
+        fit = min if self.collage_contain.get() else max
+        sc = fit(cw / iw, ch / ih) * zoom
         return max(1, int(round(iw * sc))), max(1, int(round(ih * sc)))
 
     def _rot_xy(self, lx, ly, deg):
@@ -3329,6 +3359,7 @@ class ImageProcessor:
         if cv is None: return
         try:
             W = max(1, self.collage_w.get()); H = max(1, self.collage_h.get()); g = max(0, self.collage_gutter.get())
+            W, H, g = self._collage_dimensions()
         except Exception:
             return  # valore ancora incompleto durante la digitazione: salto il render
         cv.delete("all"); self._collage_cells = []; self._collage_sig_rect = None
@@ -3581,7 +3612,7 @@ class ImageProcessor:
             return
         try:
             try:
-                W = max(1, self.collage_w.get()); H = max(1, self.collage_h.get()); g = max(0, self.collage_gutter.get())
+                W, H, g = self._collage_dimensions()
             except Exception:
                 messagebox.showwarning("Collage", "Dimensioni non valide: controlla larghezza/altezza/spazio.")
                 return

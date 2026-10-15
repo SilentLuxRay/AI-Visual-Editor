@@ -246,6 +246,11 @@ Each image has its own **Scale %** control below its name: use the slider or ent
 
 Choose **Grid** to arrange images in a table, with independently configurable columns and rows (for example, 2 × 2). Images fill cells from left to right, then top to bottom; empty cells retain the gap colour. Extra rows are added automatically if needed to include every image. A grid can also be used as the starting arrangement for a free layout.
 
+Two optional controls in **Format**, both off by default:
+
+- **Calculate height from the first image** computes the document height from your chosen width, the first image's proportions and the gaps. Available for columns, rows and grids.
+- **Show entire image (no cropping)** fits each image inside its panel, filling unused space with the gap colour. Useful for mixed image proportions; keep individual image scale at **100%** to show the whole image.
+
 **Uniform borders, automatically.** Do not try to leave equal gaps by hand: make the panels **touch each other**, and the tool creates the white space by shrinking each shape by half the gap. Two touching panels therefore end up exactly one gap apart — everywhere. **Snap corners and edges** makes them click together.
 
 Layouts you like can be saved as **presets** and reapplied to any other set of images.
