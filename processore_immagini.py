@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.35"
-APP_CODENAME = "Collage Fit"
+APP_VERSION = "2.36"
+APP_CODENAME = "Extra Folders"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"
@@ -337,6 +337,7 @@ class ImageProcessor:
                 "c_signature": "FIRMA", "c_sig_apply": "Applica firma", "c_sig_size": "Dim %",
                 "c_hint_sig": "💡 Trascina la firma nell'anteprima per spostarla.",
                 "signature_opacity": "Opacità firma %",
+                "extra_folder": "Cartella", "extra_file": "Elemento",
                 "c_auto_height": "Calcola altezza dalla prima immagine",
                 "c_contain": "Mostra immagine intera (senza ritaglio)",
                 "c_auto_hint": "Altezza automatica solo per colonne, righe e griglia.\nUsa le proporzioni della prima foto e la larghezza scelta.\nPer foto diverse usa immagine intera; scala 100% per vederla tutta.",
@@ -467,6 +468,7 @@ class ImageProcessor:
             "c_signature": "SIGNATURE", "c_sig_apply": "Apply signature", "c_sig_size": "Size %",
             "c_hint_sig": "💡 Drag the signature in the preview to move it.",
             "signature_opacity": "Signature opacity %",
+            "extra_folder": "Folder", "extra_file": "Item",
             "c_auto_height": "Calculate height from the first image",
             "c_contain": "Show entire image (no cropping)",
             "c_auto_hint": "Automatic height for columns, rows and grid only.\nUses the first photo's ratio and the chosen document width.\nFor mixed ratios use entire image; set scale to 100% to show it all.",
@@ -1512,7 +1514,17 @@ class ImageProcessor:
         self.combo_trama = self._combo(self.trama_selector_frame, width=10); self.combo_trama.pack(fill=tk.X, pady=(2, 4)); self.combo_trama.bind("<<ComboboxSelected>>", self.change_trama)
         self.combo_rating = self._combo(body, width=10); self.combo_rating.pack(fill=tk.X, pady=3); self.combo_rating.bind("<<ComboboxSelected>>", self.change_rating)
         self._mk(tk.Label, body, "extra_section", bg=C["card"], fg=C["teal"], font=(self.FONT, 8, "bold")).pack(anchor="w", pady=(6, 0))
-        self.combo_extra = self._combo(body, width=10); self.combo_extra.pack(fill=tk.X, pady=3); self.combo_extra.bind("<<ComboboxSelected>>", self.change_extra)
+        extra_picker = tk.Frame(body, bg=C["card"]); extra_picker.pack(fill=tk.X, pady=3)
+        extra_picker.columnconfigure(0, weight=1, uniform="extra_picker")
+        extra_picker.columnconfigure(1, weight=1, uniform="extra_picker")
+        self._mk(tk.Label, extra_picker, "extra_folder", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).grid(row=0, column=0, sticky="w")
+        self._mk(tk.Label, extra_picker, "extra_file", bg=C["card"], fg=C["muted"], font=(self.FONT, 8)).grid(row=0, column=1, sticky="w", padx=(4, 0))
+        self.combo_extra_folder = self._combo(extra_picker, width=10)
+        self.combo_extra_folder.grid(row=1, column=0, sticky="ew", padx=(0, 4))
+        self.combo_extra_folder.bind("<<ComboboxSelected>>", self._refresh_extra_files)
+        self.combo_extra = self._combo(extra_picker, width=10)
+        self.combo_extra.grid(row=1, column=1, sticky="ew", padx=(4, 0))
+        self.combo_extra.bind("<<ComboboxSelected>>", self.change_extra)
         self._mk(tk.Label, body, "extra_hint", bg=C["card"], fg=C["faint"], font=(self.FONT, 8)).pack(anchor="w")
         self._mbtn(body, key="extra_replace", command=self.replace_selected_extra, kind="normal").pack(fill=tk.X, pady=(3, 0))
         extra_tgt_row = tk.Frame(body, bg=C["card"]); extra_tgt_row.pack(fill=tk.X, pady=(2, 0))
@@ -1878,9 +1890,12 @@ class ImageProcessor:
         r_l = [f for f in os.listdir(self.folder_rating) if f.lower().endswith('.png')]
         self.combo_rating['values'] = r_l
         if r_l: self.combo_rating.current(0); self.change_rating()
-        e_l = [f for f in os.listdir(self.folder_extra) if f.lower().endswith('.png')]
-        self.combo_extra['values'] = e_l
-        if e_l: self.combo_extra.current(0); self.change_extra()
+        folders = sorted((os.path.relpath(folder, self.folder_extra)
+                          for folder, _, _ in os.walk(self.folder_extra)
+                          if folder != self.folder_extra), key=str.casefold)
+        self.combo_extra_folder['values'] = [""] + folders
+        self.combo_extra_folder.set("")
+        self._refresh_extra_files()
         self.refresh_cornici_list(); self.update_layer_panel()
     def refresh_cornici_list(self):
         f = self.folder_mask if self.trama_mode.get() else self.folder_cornici
@@ -2158,13 +2173,27 @@ class ImageProcessor:
             self.refresh_trama_list(prefisso)
     def change_rating(self, e=None):
         sel = self.combo_rating.get(); [self.raw_assets.update({"rating": Image.open(os.path.join(self.folder_rating, sel)).convert("RGBA")}) if sel else None]; self.draw_element("rating") if self.state["rating"]["pos"] else None
+    def _refresh_extra_files(self, e=None):
+        folder = os.path.join(self.folder_extra, self.combo_extra_folder.get())
+        files = sorted((name for name in os.listdir(folder)
+                        if name.lower().endswith('.png') and os.path.isfile(os.path.join(folder, name))),
+                       key=str.casefold) if os.path.isdir(folder) else []
+        self.combo_extra['values'] = files
+        self.combo_extra.set("")
+        self.raw_assets["extra"] = None
+        self.current_extra_name = "extra"
+        if files:
+            self.combo_extra.current(0)
+            self.change_extra()
+
     def change_extra(self, e=None):
         """Sceglie l'asset per il PROSSIMO elemento EXTRA aggiunto (SHIFT+click).
         Non tocca gli elementi già piazzati: per cambiarli si usa 'Sostituisci selezionato'."""
         sel = self.combo_extra.get()
         if not sel: return
-        self.raw_assets["extra"] = Image.open(os.path.join(self.folder_extra, sel)).convert("RGBA")
-        self.current_extra_name = os.path.splitext(sel)[0]
+        relative = os.path.join(self.combo_extra_folder.get(), sel)
+        self.raw_assets["extra"] = Image.open(os.path.join(self.folder_extra, relative)).convert("RGBA")
+        self.current_extra_name = os.path.splitext(relative)[0]
 
     def replace_selected_extra(self):
         """Sostituisce l'immagine dell'EXTRA selezionato con l'asset scelto nel menu."""

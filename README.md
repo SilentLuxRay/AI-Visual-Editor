@@ -138,6 +138,8 @@ The exported frame is a PNG with transparency instead of a JPG. The overlay choo
 
 ### Extra elements
 
+Organise PNG assets in subfolders inside `Extra/`. The **Folder** selector lists subfolders, including nested ones; leave it blank to browse the root. The adjacent **Item** selector shows only PNG files directly inside the selected folder.
+
 ![Extra](screenshots/7_Inserire_Extra.png)
 
 **SHIFT + left-click** adds an extra badge. You can add **as many as you like** — each one is moved, resized, rotated, hidden or deleted independently, and they all appear as separate rows in *Layers Control*.
