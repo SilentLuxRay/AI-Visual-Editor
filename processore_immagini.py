@@ -12,8 +12,8 @@ import urllib.error
 from datetime import datetime
 
 # --- identità della versione: unico punto in cui il numero è scritto ---
-APP_VERSION = "2.36"
-APP_CODENAME = "Extra Folders"
+APP_VERSION = "2.37"
+APP_CODENAME = "Windows Portable"
 GITHUB_REPO = "SilentLuxRay/AI-Visual-Editor"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 GITHUB_RELEASES_PAGE = f"https://github.com/{GITHUB_REPO}/releases/latest"

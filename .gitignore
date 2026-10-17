@@ -57,6 +57,8 @@ Output_Pubblicazione/
 Output_AI/
 output/
 .venv/
+runtime/
+dist/
 __pycache__/
 *.pyc
 *.exe

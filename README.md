@@ -43,6 +43,16 @@ Everything is **non-destructive**: the tool always works on a copy and never mod
 
 ## Requirements and installation
 
+### Windows: ready-to-run portable package
+
+Download **AI-Visual-Editor-v2.37-Windows-Portable.zip** from the [latest release](https://github.com/SilentLuxRay/AI-Visual-Editor/releases/latest), extract the whole archive and double-click **Start AI Visual Editor.cmd**. This package includes a dedicated Python 3.10 runtime, Pillow and drag-and-drop support; no system Python installation is required. Keep the `runtime` folder with the application when moving it.
+
+The portable package starts with empty personal text settings and includes only the public example assets. Existing installations can retain their settings and assets: extract into a separate folder and copy your configuration and asset folders across. The built-in updater updates the application script; runtime upgrades require a new portable package.
+
+### Source installation (Windows, macOS and Linux)
+
+GitHub's **Source code** archives do not include the Windows runtime. To run from source:
+
 - **Python 3.9+**
 - **Pillow** — required
 - **tkinterdnd2** — optional, adds drag & drop of files onto the canvas
@@ -59,6 +69,8 @@ python processore_immagini.py
 Tkinter ships with Python on Windows and macOS. On Linux you may need `sudo apt install python3-tk`.
 
 All working folders are created automatically the first time you run the program.
+
+To package a dedicated Windows runtime locally: `python build_portable.py --runtime PATH_TO_RUNTIME`. The ZIP includes Git-tracked project files and that runtime; use a clean runtime containing only the application's dependencies. Python and dependency licenses are included alongside their runtime files.
 
 ---
 
